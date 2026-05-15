@@ -5,7 +5,7 @@ Local-first MP4 to Markdown transcription using Go orchestration and sherpa-onnx
 ```bash
 go run ./cmd/onnx-transcribe --help
 go run ./cmd/onnx-transcribe setup
-go run ./cmd/onnx-transcribe input.mp4 --hotwords hotwords.txt --out transcript.md
+go run ./cmd/onnx-transcribe input.mp4 --threads 8 --out transcript.md
 ```
 
 The binary name is `onnx-transcribe`.
@@ -46,7 +46,7 @@ onnx-transcribe setup --data-dir ./vendor/onnx-transcriber
 Large media files are ignored. For local testing, this repo expects the copied MP4 at:
 
 ```text
-testdata/media/space-illusion-720p-h265.mp4
+testdata/media/space-illusion-30s.mp4
 ```
 
 Run:

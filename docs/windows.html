@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Windows runbook for onnx-transcribe</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: #101d2f;
+      --panel-2: #132842;
+      --ink: #edf6ff;
+      --muted: #9fb7cc;
+      --line: #284765;
+      --accent: #62e6c6;
+      --hot: #f6c453;
+      --bad: #ff7a7a;
+      --code: #07101c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(98, 230, 198, 0.08) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(98, 230, 198, 0.08) 1px, transparent 1px),
+        radial-gradient(circle at 80% 8%, rgba(246, 196, 83, 0.16), transparent 24rem),
+        linear-gradient(145deg, #08111f 0%, #0c1829 58%, #07101c 100%);
+      background-size: 28px 28px, 28px 28px, auto, auto;
+      color: var(--ink);
+      font-family: "Avenir Next Condensed", "Gill Sans", "Trebuchet MS", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 42px 0 64px;
+    }
+
+    header {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: 1.1fr 0.9fr;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 8vw, 7rem);
+      line-height: 0.84;
+      letter-spacing: -0.06em;
+      margin: 0;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      font-size: 1.55rem;
+      letter-spacing: -0.02em;
+      margin: 0 0 12px;
+    }
+
+    p {
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+
+    .hero-card,
+    section {
+      background: linear-gradient(160deg, rgba(19, 40, 66, 0.94), rgba(16, 29, 47, 0.94));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      padding: 24px;
+    }
+
+    .hero-card {
+      align-self: end;
+      border-color: rgba(98, 230, 198, 0.45);
+    }
+
+    .tag {
+      color: var(--accent);
+      display: inline-block;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    ol,
+    ul {
+      margin: 0;
+      padding-left: 1.25rem;
+    }
+
+    li {
+      color: var(--muted);
+      margin: 8px 0;
+    }
+
+    strong {
+      color: var(--ink);
+    }
+
+    code,
+    pre {
+      font-family: Consolas, "Cascadia Mono", monospace;
+    }
+
+    pre {
+      background: var(--code);
+      border: 1px solid rgba(98, 230, 198, 0.22);
+      border-radius: 14px;
+      color: #ecfeff;
+      overflow-x: auto;
+      padding: 14px 16px;
+      white-space: pre-wrap;
+    }
+
+    .warn {
+      border-color: rgba(246, 196, 83, 0.5);
+    }
+
+    .warn h2 {
+      color: var(--hot);
+    }
+
+    .error h2 {
+      color: var(--bad);
+    }
+
+    @media (max-width: 760px) {
+      header,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <span class="tag">Windows RTX 3070 Ti path</span>
+        <h1>Run the SEACO pipeline</h1>
+      </div>
+      <div class="hero-card">
+        <h2>Goal</h2>
+        <p>Get one path working on Windows: MP4 input, SEACO/Paraformer ASR, CT-Transformer punctuation, Markdown output.</p>
+        <p>CUDA is not required for this first pass. Start CPU-only unless runtime is too slow.</p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section>
+        <h2>1. Install prerequisites</h2>
+        <p>Use PowerShell. Install Go, Git, ffmpeg, and aria2.</p>
+        <pre><code>winget install GoLang.Go
+winget install Git.Git
+winget install Gyan.FFmpeg
+winget install aria2.aria2</code></pre>
+        <p>Restart PowerShell after install so <code>PATH</code> updates are visible.</p>
+      </section>
+
+      <section>
+        <h2>2. Build the binary</h2>
+        <p>If GNU make is available, use the same flow as macOS.</p>
+        <pre><code>make install
+onnx-transcribe --help</code></pre>
+        <p>If make is not installed, use native Go:</p>
+        <pre><code>go build -o "$env:USERPROFILE\go\bin\onnx-transcribe.exe" .\cmd\onnx-transcribe
+onnx-transcribe --help</code></pre>
+      </section>
+
+      <section>
+        <h2>3. Install runtime and models</h2>
+        <p>This downloads sherpa-onnx runtime, SEACO/Paraformer ASR, and CT-Transformer punctuation into <code>%LOCALAPPDATA%\onnx-transcriber</code>.</p>
+        <pre><code>onnx-transcribe setup</code></pre>
+        <p>Because aria2 is installed, setup should show compact download progress with resume support.</p>
+      </section>
+
+      <section>
+        <h2>4. Check setup</h2>
+        <p>Doctor should find ffmpeg, sherpa binaries, ASR model files, and punctuation model files.</p>
+        <pre><code>onnx-transcribe doctor</code></pre>
+      </section>
+
+      <section class="wide">
+        <h2>5. Copy the smoke MP4</h2>
+        <p>Use a simple path with no spaces or Chinese characters.</p>
+        <pre><code>mkdir testdata\media
+ffmpeg -y -i "$env:USERPROFILE\Downloads\131202 №30431 时空的虚幻 H265-高清-720P.mp4" -t 30 -c copy testdata\media\space-illusion-30s.mp4</code></pre>
+      </section>
+
+      <section class="wide">
+        <h2>6. Run transcription</h2>
+        <pre><code>onnx-transcribe testdata\media\space-illusion-30s.mp4 `
+  --threads 8 `
+  --out testdata\transcript.smoke.md</code></pre>
+        <p>Open <code>testdata\transcript.smoke.md</code> and check Mandarin accuracy, punctuation quality, runtime, and hallucination around silence or music.</p>
+      </section>
+
+      <section class="warn">
+        <h2>If setup fails</h2>
+        <ul>
+          <li>Run <code>aria2c --version</code> and <code>ffmpeg -version</code> to confirm both are in <code>PATH</code>.</li>
+          <li>Delete only the partial cache file ending in <code>.tmp</code>, then rerun <code>onnx-transcribe setup</code>.</li>
+          <li>For offline install, download archives on another machine and run <code>onnx-transcribe setup --from-dir .\downloads</code>.</li>
+        </ul>
+      </section>
+
+      <section class="error">
+        <h2>Not in scope yet</h2>
+        <ul>
+          <li>No model bake-off command.</li>
+          <li>No CUDA setup until CPU runtime proves too slow.</li>
+          <li>No bundled ffmpeg until system ffmpeg proves too painful.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

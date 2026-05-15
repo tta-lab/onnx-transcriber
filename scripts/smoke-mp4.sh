@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-fixture="testdata/media/space-illusion-720p-h265.mp4"
+fixture="testdata/media/space-illusion-30s.mp4"
 
 if [ ! -f "$fixture" ]; then
   echo "missing fixture: $fixture" >&2
@@ -10,6 +10,6 @@ if [ ! -f "$fixture" ]; then
 fi
 
 go run ./cmd/onnx-transcribe "$fixture" \
-  --hotwords testdata/hotwords.txt \
+  --threads 8 \
   --out testdata/transcript.smoke.md \
   "$@"

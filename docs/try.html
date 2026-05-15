@@ -136,10 +136,10 @@ onnx-transcribe models list</code></pre>
       <section>
         <h2>2. Confirm the fixture</h2>
         <p>The local MP4 is ignored by Git. It should exist here:</p>
-        <pre><code>testdata/media/space-illusion-720p-h265.mp4</code></pre>
+        <pre><code>testdata/media/space-illusion-30s.mp4</code></pre>
         <p>If it is missing, restore it from Downloads:</p>
         <pre><code>mkdir -p testdata/media
-cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testdata/media/space-illusion-720p-h265.mp4</code></pre>
+ffmpeg -y -i "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" -t 30 -c copy testdata/media/space-illusion-30s.mp4</code></pre>
       </section>
 
       <section>
@@ -163,14 +163,14 @@ cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testda
         <pre><code>sh scripts/smoke-mp4.sh</code></pre>
         <p>Direct command shape:</p>
         <pre><code>onnx-transcribe \
-  "testdata/media/space-illusion-720p-h265.mp4" \
-  --hotwords testdata/hotwords.txt \
+  "testdata/media/space-illusion-30s.mp4" \
+  --threads 8 \
   --out testdata/transcript.smoke.md</code></pre>
       </section>
 
       <section>
         <h2>6. Inspect output</h2>
-        <p>Review readability, hotword hits, punctuation, and hallucination around silence or music.</p>
+        <p>Review readability, punctuation, runtime, and hallucination around silence or music.</p>
         <pre><code>open testdata/transcript.smoke.md
 wc -m testdata/transcript.smoke.md</code></pre>
       </section>
@@ -179,12 +179,10 @@ wc -m testdata/transcript.smoke.md</code></pre>
     <section>
       <h2>Remaining TODO</h2>
       <ul>
-        <li>Make the SEACO/Paraformer ASR runner work against the installed <code>v1.13.0</code> sherpa-onnx binary.</li>
-        <li>Make the CT-Transformer punctuation runner work after ASR, including any needed file-based input/output handling.</li>
+        <li>Research hotword support outside the current sherpa-onnx offline Paraformer path.</li>
         <li>Add a known SHA256 for the SEACO/Paraformer ASR archive or document why GitHub does not expose one.</li>
-        <li>Run the local MP4 through the full SEACO plus CT-Transformer pipeline and fix any command or path issues.</li>
-        <li>Check Chinese accuracy, hotword hits, punctuation quality, runtime, and silence/music hallucination on that one pipeline.</li>
-        <li>Improve punctuation chunking only if the local MP4 exposes long-input CT-Transformer failures.</li>
+        <li>Check Chinese accuracy, punctuation quality, runtime, and silence/music hallucination on the short verified path.</li>
+        <li>Design chunking separately, with overlap and de-duplication, after the short unchunked path works.</li>
         <li>Add VAD only if the first end-to-end run has silence or music hallucination problems.</li>
         <li>Add Windows and Linux smoke tests after the macOS SEACO plus CT-Transformer path works.</li>
         <li>Decide whether to bundle ffmpeg or keep system ffmpeg as a documented prerequisite.</li>

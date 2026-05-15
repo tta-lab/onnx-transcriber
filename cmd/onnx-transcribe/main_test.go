@@ -13,3 +13,12 @@ func TestNormalizeTranscribeArgsAllowsInputBeforeFlags(t *testing.T) {
 		t.Fatalf("normalizeTranscribeArgs() = %#v, want %#v", got, want)
 	}
 }
+
+func TestExtractASRTextFromJSON(t *testing.T) {
+	got := extractASRText(`{"text":"第一段"}`)
+	want := "第一段"
+
+	if got != want {
+		t.Fatalf("extractASRText() = %q, want %q", got, want)
+	}
+}

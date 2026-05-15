@@ -57,7 +57,7 @@ func (i Installer) InstallRuntime(name, fromDir string) error {
 	if err := ExtractTarBz2(archive, dest); err != nil {
 		return err
 	}
-	return PromoteBinaries(dest, asset.Binaries)
+	return nil
 }
 
 func (i Installer) InstallModel(name, fromDir string) error {
@@ -154,7 +154,9 @@ func (i Installer) fetchWithAria2(url, out string) error {
 		"--min-split-size=1M",
 		"--retry-wait=2",
 		"--max-tries=5",
-		"--summary-interval=1",
+		"--summary-interval=0",
+		"--show-console-readout=true",
+		"--console-log-level=warn",
 		"--download-result=hide",
 		"--dir", filepath.Dir(out),
 		"--out", filepath.Base(out),

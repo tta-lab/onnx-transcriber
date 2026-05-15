@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -79,7 +81,7 @@ func setup(args []string, stdout io.Writer) error {
 	}
 	r := doctor.Run(home)
 	doctor.Write(stdout, r)
-	fmt.Fprintln(stdout, "example: onnx-transcribe input.mp4 --hotwords hotwords.txt --out transcript.md")
+	fmt.Fprintln(stdout, "example: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	return nil
 }
 
@@ -143,18 +145,19 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	dataDir := fs.String("data-dir", "", "override data directory")
 	hotwordsScore := fs.Float64("hotwords-score", 1.5, "hotwords score")
 	keepTemp := fs.Bool("keep-temp", false, "keep temporary working directory")
+	threads := fs.Int("threads", runtime.NumCPU(), "ASR CPU threads")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: onnx-transcribe input.mp4 --hotwords hotwords.txt --out transcript.md")
+		return errors.New("usage: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	}
 	home, err := resolveHome(*dataDir)
 	if err != nil {
 		return err
 	}
 	r := runner{home: home, stderr: stderr}
-	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp)
+	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads)
 	if err != nil {
 		return err
 	}
@@ -180,7 +183,7 @@ type runner struct {
 	stderr io.Writer
 }
 
-func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool) (string, error) {
+func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int) (string, error) {
 	workDir, err := os.MkdirTemp("", "onnx-transcribe-*")
 	if err != nil {
 		return "", err
@@ -190,7 +193,7 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 	}
 
 	wav := filepath.Join(workDir, "audio.wav")
-	if err := runCommand(r.stderr, "ffmpeg", "-y", "-i", input, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav); err != nil {
+	if err := runCommand(r.stderr, "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", input, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav); err != nil {
 		return "", err
 	}
 
@@ -208,17 +211,31 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 		return "", fmt.Errorf("tokens missing under %s: %w", asrModelDir, err)
 	}
 
-	asrArgs := []string{"--tokens", tokens, "--paraformer", model, "--decoding-method", "modified_beam_search"}
+	asrArgs := []string{
+		"--tokens=" + tokens,
+		"--paraformer=" + model,
+		"--decoding-method=greedy_search",
+		"--print-args=false",
+		"--num-threads=" + strconv.Itoa(threads),
+	}
 	if hotwords != "" {
-		asrArgs = append(asrArgs, "--hotwords-file", hotwords, "--hotwords-score", strconv.FormatFloat(hotwordsScore, 'f', -1, 64))
+		fmt.Fprintln(r.stderr, "warning: ignoring --hotwords; sherpa-onnx v1.13.0 Paraformer supports only greedy_search")
 	}
 	asrArgs = append(asrArgs, wav)
 	raw, err := outputCommand(r.stderr, asrBin, asrArgs...)
 	if err != nil {
 		return "", err
 	}
+	rawText := strings.TrimSpace(raw)
+	if rawText == "" {
+		return "", errors.New("ASR returned no text")
+	}
+	rawText = extractASRText(rawText)
+	if rawText == "" {
+		return "", errors.New("ASR returned no transcript text")
+	}
 
-	punctuated := strings.TrimSpace(raw)
+	punctuated := rawText
 	if punctBin, err := r.binary("sherpa-onnx-offline-punctuation"); err == nil {
 		if punct, err := r.punctuate(punctBin, punctuated); err == nil && strings.TrimSpace(punct) != "" {
 			punctuated = punct
@@ -235,26 +252,53 @@ func (r runner) punctuate(bin, text string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command(bin, "--model", model)
-	cmd.Stdin = strings.NewReader(text)
+	cmd := exec.Command(bin, "--ct-transformer="+model, "--print-args=false", text)
 	cmd.Stderr = r.stderr
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	return out.String(), cmd.Run()
+	err = cmd.Run()
+	return out.String(), err
 }
 
 func (r runner) binary(name string) (string, error) {
 	if filepath.Separator == '\\' {
 		name += ".exe"
 	}
-	local := filepath.Join(config.RuntimeBinDir(r.home, config.CurrentPlatformKey()), name)
-	if _, err := os.Stat(local); err == nil {
+	root := config.RuntimeBinDir(r.home, config.CurrentPlatformKey())
+	if local, err := findRuntimeBinary(root, name); err == nil {
 		return local, nil
 	}
 	if path, err := exec.LookPath(name); err == nil {
 		return path, nil
 	}
 	return "", fmt.Errorf("%s not found; run onnx-transcribe setup", name)
+}
+
+func findRuntimeBinary(root, name string) (string, error) {
+	var fallback string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if filepath.Base(path) != name {
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) == "bin" {
+			fallback = path
+			return filepath.SkipAll
+		}
+		if fallback == "" {
+			fallback = path
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if fallback == "" {
+		return "", os.ErrNotExist
+	}
+	return fallback, nil
 }
 
 func runCommand(stderr io.Writer, name string, args ...string) error {
@@ -269,7 +313,19 @@ func outputCommand(stderr io.Writer, name string, args ...string) (string, error
 	cmd.Stderr = stderr
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	return out.String(), cmd.Run()
+	err := cmd.Run()
+	return out.String(), err
+}
+
+func extractASRText(output string) string {
+	type result struct {
+		Text string `json:"text"`
+	}
+	var r result
+	if err := json.Unmarshal([]byte(output), &r); err == nil {
+		return strings.TrimSpace(r.Text)
+	}
+	return strings.TrimSpace(output)
 }
 
 func findFirst(root string, names ...string) (string, error) {
@@ -304,7 +360,7 @@ func resolveHome(override string) (string, error) {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "onnx-transcribe input.mp4 --hotwords hotwords.txt --out transcript.md")
+	fmt.Fprintln(w, "onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	fmt.Fprintln(w, "onnx-transcribe setup [--model seaco-paraformer-trilingual]")
 	fmt.Fprintln(w, "onnx-transcribe models list")
 	fmt.Fprintln(w, "onnx-transcribe models install <name>")

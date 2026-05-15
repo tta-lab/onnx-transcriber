@@ -32,10 +32,8 @@ func Run(home string) Result {
 
 	binDir := config.RuntimeBinDir(home, config.CurrentPlatformKey())
 	for _, name := range runtimeBinaryNames() {
-		path := filepath.Join(binDir, name)
-		info, err := os.Stat(path)
-		ok := err == nil && !info.IsDir()
-		check(ok, status(ok, path))
+		path, err := findExecutable(binDir, name)
+		check(err == nil, status(err == nil, pathOrName(path, name)))
 	}
 
 	asrOK := pathExists(config.ModelDir(home, "seaco-paraformer-trilingual"))
@@ -69,9 +67,43 @@ func pathExists(path string) bool {
 	return err == nil
 }
 
+func findExecutable(root, name string) (string, error) {
+	var fallback string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if filepath.Base(path) != name {
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) == "bin" {
+			fallback = path
+			return filepath.SkipAll
+		}
+		if fallback == "" {
+			fallback = path
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if fallback == "" {
+		return "", os.ErrNotExist
+	}
+	return fallback, nil
+}
+
 func status(ok bool, name string) string {
 	if ok {
 		return "ok: " + name
 	}
 	return "missing: " + name
+}
+
+func pathOrName(path, name string) string {
+	if path != "" {
+		return path
+	}
+	return name
 }
