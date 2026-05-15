@@ -10,8 +10,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/guion-opensource/onnx-transcriber/internal/config"
 	"github.com/guion-opensource/onnx-transcriber/internal/manifest"
@@ -117,31 +119,147 @@ func (i Installer) fetch(url, wantSHA, fromDir string) (string, error) {
 		return out, nil
 	}
 
+	tmp := out + ".tmp"
+	if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	if _, err := exec.LookPath("aria2c"); err == nil {
+		if err := i.fetchWithAria2(url, tmp); err != nil {
+			_ = os.Remove(tmp)
+			return "", err
+		}
+	} else {
+		if err := i.fetchWithHTTP(url, tmp); err != nil {
+			_ = os.Remove(tmp)
+			return "", err
+		}
+	}
+	if err := verifySHA(tmp, wantSHA); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func (i Installer) fetchWithAria2(url, out string) error {
+	fmt.Fprintf(i.Stdout, "downloading with aria2c: %s\n", strings.TrimSuffix(filepath.Base(out), ".tmp"))
+	cmd := exec.Command(
+		"aria2c",
+		"--continue=true",
+		"--max-connection-per-server=8",
+		"--split=8",
+		"--min-split-size=1M",
+		"--retry-wait=2",
+		"--max-tries=5",
+		"--summary-interval=1",
+		"--download-result=hide",
+		"--dir", filepath.Dir(out),
+		"--out", filepath.Base(out),
+		url,
+	)
+	cmd.Stdout = i.Stdout
+	cmd.Stderr = i.Stdout
+	return cmd.Run()
+}
+
+func (i Installer) fetchWithHTTP(url, out string) error {
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		err := i.fetchWithHTTPOnce(url, out)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		_ = os.Remove(out)
+		fmt.Fprintf(i.Stdout, "download failed (attempt %d/3): %v\n", attempt, err)
+		time.Sleep(time.Duration(attempt) * time.Second)
+	}
+	return lastErr
+}
+
+func (i Installer) fetchWithHTTPOnce(url, out string) error {
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return "", fmt.Errorf("download %s: %s", url, resp.Status)
+		return fmt.Errorf("download %s: %s", url, resp.Status)
 	}
 
-	tmp := out + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.Create(out)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if _, err = io.Copy(f, resp.Body); err != nil {
-		_ = f.Close()
-		return "", err
+	defer f.Close()
+
+	reader := &progressReader{
+		reader: resp.Body,
+		total:  resp.ContentLength,
+		out:    i.Stdout,
+		name:   strings.TrimSuffix(filepath.Base(out), ".tmp"),
 	}
-	if err = f.Close(); err != nil {
-		return "", err
+	if _, err = io.Copy(f, reader); err != nil {
+		return err
 	}
-	if err = verifySHA(tmp, wantSHA); err != nil {
-		return "", err
+	reader.finish()
+	return nil
+}
+
+type progressReader struct {
+	reader io.Reader
+	total  int64
+	read   int64
+	last   int
+	out    io.Writer
+	name   string
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		r.read += int64(n)
+		r.print(false)
 	}
-	return out, os.Rename(tmp, out)
+	return n, err
+}
+
+func (r *progressReader) finish() {
+	r.print(true)
+	fmt.Fprintln(r.out)
+}
+
+func (r *progressReader) print(force bool) {
+	if r.total <= 0 {
+		if force {
+			fmt.Fprintf(r.out, "\rdownloaded %s: %s", r.name, humanBytes(r.read))
+		}
+		return
+	}
+	percent := int(float64(r.read) / float64(r.total) * 100)
+	if !force && percent == r.last {
+		return
+	}
+	r.last = percent
+	fmt.Fprintf(r.out, "\rdownloading %s: %3d%% %s/%s", r.name, percent, humanBytes(r.read), humanBytes(r.total))
+}
+
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	value := float64(n)
+	for _, suffix := range []string{"KiB", "MiB", "GiB", "TiB"} {
+		value /= unit
+		if value < unit {
+			return fmt.Sprintf("%.1f %s", value, suffix)
+		}
+	}
+	return fmt.Sprintf("%.1f PiB", value/unit)
 }
 
 func ExtractTarBz2(archive, dest string) error {
