@@ -179,14 +179,14 @@ wc -m testdata/transcript.smoke.md</code></pre>
     <section>
       <h2>Remaining TODO</h2>
       <ul>
-        <li>Verify the exact sherpa-onnx ASR command flags against the installed <code>v1.13.0</code> binary.</li>
-        <li>Verify punctuation CLI stdin/stdout behavior and adjust the runner if the binary expects file arguments.</li>
+        <li>Make the SEACO/Paraformer ASR runner work against the installed <code>v1.13.0</code> sherpa-onnx binary.</li>
+        <li>Make the CT-Transformer punctuation runner work after ASR, including any needed file-based input/output handling.</li>
         <li>Add a known SHA256 for the SEACO/Paraformer ASR archive or document why GitHub does not expose one.</li>
-        <li>Find and verify the Silero VAD model URL, checksum, and runtime flags.</li>
-        <li>Run the local MP4 through the full pipeline and record accuracy, hotword hit rate, runtime, and hallucination notes.</li>
-        <li>Add a benchmark command for comparing SEACO/Paraformer, Zipformer ZH-EN, Paraformer ZH, and SenseVoice as a reference.</li>
-        <li>Improve punctuation chunking for long transcripts before feeding CT-Transformer.</li>
-        <li>Add Windows and Linux smoke tests once macOS works end to end.</li>
+        <li>Run the local MP4 through the full SEACO plus CT-Transformer pipeline and fix any command or path issues.</li>
+        <li>Check Chinese accuracy, hotword hits, punctuation quality, runtime, and silence/music hallucination on that one pipeline.</li>
+        <li>Improve punctuation chunking only if the local MP4 exposes long-input CT-Transformer failures.</li>
+        <li>Add VAD only if the first end-to-end run has silence or music hallucination problems.</li>
+        <li>Add Windows and Linux smoke tests after the macOS SEACO plus CT-Transformer path works.</li>
         <li>Decide whether to bundle ffmpeg or keep system ffmpeg as a documented prerequisite.</li>
       </ul>
     </section>
