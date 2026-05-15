@@ -46,7 +46,7 @@ onnx-transcribe setup --data-dir ./vendor/onnx-transcriber
 Large media files are ignored. For local testing, this repo expects the copied MP4 at:
 
 ```text
-testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4
+testdata/media/space-illusion-720p-h265.mp4
 ```
 
 Run:

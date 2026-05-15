@@ -136,13 +136,13 @@ onnx-transcribe models list</code></pre>
       <section>
         <h2>2. Confirm the fixture</h2>
         <p>The local MP4 is ignored by Git. It should exist here:</p>
-        <pre><code>testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4</code></pre>
+        <pre><code>testdata/media/space-illusion-720p-h265.mp4</code></pre>
         <p>If it is missing, restore it from Downloads:</p>
         <pre><code>mkdir -p testdata/media
-cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testdata/media/</code></pre>
+cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testdata/media/space-illusion-720p-h265.mp4</code></pre>
       </section>
 
-      <section>
+  <section>
         <h2>3. Install assets</h2>
         <p>Install sherpa-onnx runtime and model assets into the default user data dir.</p>
         <pre><code>onnx-transcribe setup</code></pre>
@@ -163,7 +163,7 @@ cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testda
         <pre><code>sh scripts/smoke-mp4.sh</code></pre>
         <p>Direct command shape:</p>
         <pre><code>onnx-transcribe \
-  "testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4" \
+  "testdata/media/space-illusion-720p-h265.mp4" \
   --hotwords testdata/hotwords.txt \
   --out testdata/transcript.smoke.md</code></pre>
       </section>

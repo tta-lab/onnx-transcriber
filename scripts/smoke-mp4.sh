@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-fixture="testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4"
+fixture="testdata/media/space-illusion-720p-h265.mp4"
 
 if [ ! -f "$fixture" ]; then
   echo "missing fixture: $fixture" >&2
