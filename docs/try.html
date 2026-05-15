@@ -126,11 +126,11 @@
 
     <div class="grid">
       <section class="callout">
-        <h2>1. Check the repo</h2>
-        <p>Build and test the Go scaffold first.</p>
-        <pre><code>go test ./...
-go run ./cmd/onnx-transcribe --help
-go run ./cmd/onnx-transcribe models list</code></pre>
+        <h2>1. Install the CLI</h2>
+        <p>Start with the normal local install flow. This builds <code>onnx-transcribe</code> into <code>$(go env GOPATH)/bin</code>.</p>
+        <pre><code>make install
+onnx-transcribe --help
+onnx-transcribe models list</code></pre>
       </section>
 
       <section>
@@ -145,15 +145,15 @@ cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testda
       <section>
         <h2>3. Install assets</h2>
         <p>Install sherpa-onnx runtime and model assets into the default user data dir.</p>
-        <pre><code>go run ./cmd/onnx-transcribe setup</code></pre>
+        <pre><code>onnx-transcribe setup</code></pre>
         <p>For an offline install, put archives in a local directory and use:</p>
-        <pre><code>go run ./cmd/onnx-transcribe setup --from-dir ./downloads</code></pre>
+        <pre><code>onnx-transcribe setup --from-dir ./downloads</code></pre>
       </section>
 
       <section>
         <h2>4. Check setup</h2>
         <p>Doctor should find ffmpeg, sherpa binaries, and model directories.</p>
-        <pre><code>go run ./cmd/onnx-transcribe doctor</code></pre>
+        <pre><code>onnx-transcribe doctor</code></pre>
         <p>Current expected pre-setup result: ffmpeg is found, sherpa binaries and model directories are missing.</p>
       </section>
 
@@ -162,7 +162,7 @@ cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testda
         <p>The script writes an ignored Markdown output file.</p>
         <pre><code>sh scripts/smoke-mp4.sh</code></pre>
         <p>Direct command shape:</p>
-        <pre><code>go run ./cmd/onnx-transcribe \
+        <pre><code>onnx-transcribe \
   "testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4" \
   --hotwords testdata/hotwords.txt \
   --out testdata/transcript.smoke.md</code></pre>
