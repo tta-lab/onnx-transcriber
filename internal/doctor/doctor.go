@@ -40,6 +40,8 @@ func Run(home string) Result {
 	check(asrOK, status(asrOK, "ASR model directory"))
 	punctOK := pathExists(config.ModelDir(home, "ct-transformer-zh-en"))
 	check(punctOK, status(punctOK, "punctuation model directory"))
+	vadOK := pathExists(filepath.Join(config.ModelDir(home, "silero-vad"), "silero_vad.onnx"))
+	check(vadOK, status(vadOK, "VAD model"))
 
 	return result
 }
@@ -57,9 +59,9 @@ func Write(w io.Writer, r Result) {
 
 func runtimeBinaryNames() []string {
 	if filepath.Separator == '\\' {
-		return []string{"sherpa-onnx-offline.exe", "sherpa-onnx-offline-punctuation.exe"}
+		return []string{"sherpa-onnx-offline.exe", "sherpa-onnx-offline-punctuation.exe", "sherpa-onnx-vad-with-offline-asr.exe"}
 	}
-	return []string{"sherpa-onnx-offline", "sherpa-onnx-offline-punctuation"}
+	return []string{"sherpa-onnx-offline", "sherpa-onnx-offline-punctuation", "sherpa-onnx-vad-with-offline-asr"}
 }
 
 func pathExists(path string) bool {

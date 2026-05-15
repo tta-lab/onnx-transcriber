@@ -22,3 +22,16 @@ func TestExtractASRTextFromJSON(t *testing.T) {
 		t.Fatalf("extractASRText() = %q, want %q", got, want)
 	}
 }
+
+func TestExtractVADText(t *testing.T) {
+	input := `3.046 -- 5.196: 虽然
+11.526 -- 31.580: 每个人来到地上
+noise`
+
+	got := extractVADText(input)
+	want := "虽然 每个人来到地上"
+
+	if got != want {
+		t.Fatalf("extractVADText() = %q, want %q", got, want)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -79,6 +80,10 @@ func setup(args []string, stdout io.Writer) error {
 	if err := inst.InstallModel("ct-transformer-zh-en", *fromDir); err != nil {
 		return err
 	}
+	fmt.Fprintln(stdout, "installing VAD model: silero-vad")
+	if err := inst.InstallModel("silero-vad", *fromDir); err != nil {
+		return err
+	}
 	r := doctor.Run(home)
 	doctor.Write(stdout, r)
 	fmt.Fprintln(stdout, "example: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
@@ -146,6 +151,7 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	hotwordsScore := fs.Float64("hotwords-score", 1.5, "hotwords score")
 	keepTemp := fs.Bool("keep-temp", false, "keep temporary working directory")
 	threads := fs.Int("threads", runtime.NumCPU(), "ASR CPU threads")
+	noVAD := fs.Bool("no-vad", false, "disable Silero VAD before offline ASR")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -157,7 +163,7 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	r := runner{home: home, stderr: stderr}
-	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads)
+	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD)
 	if err != nil {
 		return err
 	}
@@ -183,7 +189,7 @@ type runner struct {
 	stderr io.Writer
 }
 
-func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int) (string, error) {
+func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD bool) (string, error) {
 	workDir, err := os.MkdirTemp("", "onnx-transcribe-*")
 	if err != nil {
 		return "", err
@@ -197,10 +203,6 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 		return "", err
 	}
 
-	asrBin, err := r.binary("sherpa-onnx-offline")
-	if err != nil {
-		return "", err
-	}
 	asrModelDir := config.ModelDir(r.home, modelName)
 	model, err := findFirst(asrModelDir, "model.int8.onnx", "model.onnx")
 	if err != nil {
@@ -211,28 +213,16 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 		return "", fmt.Errorf("tokens missing under %s: %w", asrModelDir, err)
 	}
 
-	asrArgs := []string{
-		"--tokens=" + tokens,
-		"--paraformer=" + model,
-		"--decoding-method=greedy_search",
-		"--print-args=false",
-		"--num-threads=" + strconv.Itoa(threads),
-	}
 	if hotwords != "" {
 		fmt.Fprintln(r.stderr, "warning: ignoring --hotwords; sherpa-onnx v1.13.0 Paraformer supports only greedy_search")
 	}
-	asrArgs = append(asrArgs, wav)
-	raw, err := outputCommand(r.stderr, asrBin, asrArgs...)
+
+	rawText, err := r.runASR(wav, model, tokens, threads, useVAD)
 	if err != nil {
 		return "", err
 	}
-	rawText := strings.TrimSpace(raw)
 	if rawText == "" {
 		return "", errors.New("ASR returned no text")
-	}
-	rawText = extractASRText(rawText)
-	if rawText == "" {
-		return "", errors.New("ASR returned no transcript text")
 	}
 
 	punctuated := rawText
@@ -246,6 +236,54 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 	return "# Transcript\n\n" + body + "\n", nil
 }
 
+func (r runner) runASR(wav, model, tokens string, threads int, useVAD bool) (string, error) {
+	if useVAD {
+		asrBin, err := r.binary("sherpa-onnx-vad-with-offline-asr")
+		if err != nil {
+			return "", err
+		}
+		vadModelDir := config.ModelDir(r.home, "silero-vad")
+		vadModel, err := findFirst(vadModelDir, "silero_vad.onnx")
+		if err != nil {
+			return "", fmt.Errorf("VAD model missing under %s: %w", vadModelDir, err)
+		}
+		raw, err := outputCommand(
+			r.stderr,
+			asrBin,
+			"--silero-vad-model="+vadModel,
+			"--tokens="+tokens,
+			"--paraformer="+model,
+			"--decoding-method=greedy_search",
+			"--print-args=false",
+			"--num-threads="+strconv.Itoa(threads),
+			wav,
+		)
+		if err != nil {
+			return "", err
+		}
+		return extractVADText(raw), nil
+	}
+
+	asrBin, err := r.binary("sherpa-onnx-offline")
+	if err != nil {
+		return "", err
+	}
+	raw, err := outputCommand(
+		r.stderr,
+		asrBin,
+		"--tokens="+tokens,
+		"--paraformer="+model,
+		"--decoding-method=greedy_search",
+		"--print-args=false",
+		"--num-threads="+strconv.Itoa(threads),
+		wav,
+	)
+	if err != nil {
+		return "", err
+	}
+	return extractASRText(raw), nil
+}
+
 func (r runner) punctuate(bin, text string) (string, error) {
 	modelDir := config.ModelDir(r.home, "ct-transformer-zh-en")
 	model, err := findFirst(modelDir, "model.int8.onnx", "model.onnx")
@@ -253,10 +291,14 @@ func (r runner) punctuate(bin, text string) (string, error) {
 		return "", err
 	}
 	cmd := exec.Command(bin, "--ct-transformer="+model, "--print-args=false", text)
-	cmd.Stderr = r.stderr
 	var out bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = &stderr
 	err = cmd.Run()
+	if err != nil && stderr.Len() > 0 {
+		_, _ = io.Copy(r.stderr, &stderr)
+	}
 	return out.String(), err
 }
 
@@ -310,10 +352,14 @@ func runCommand(stderr io.Writer, name string, args ...string) error {
 
 func outputCommand(stderr io.Writer, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
-	cmd.Stderr = stderr
 	var out bytes.Buffer
+	var errOut bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = &errOut
 	err := cmd.Run()
+	if err != nil && errOut.Len() > 0 {
+		_, _ = io.Copy(stderr, &errOut)
+	}
 	return out.String(), err
 }
 
@@ -326,6 +372,23 @@ func extractASRText(output string) string {
 		return strings.TrimSpace(r.Text)
 	}
 	return strings.TrimSpace(output)
+}
+
+var vadLinePattern = regexp.MustCompile(`^\s*\d+(?:\.\d+)?\s+--\s+\d+(?:\.\d+)?:\s*(.+?)\s*$`)
+
+func extractVADText(output string) string {
+	var parts []string
+	for _, line := range strings.Split(output, "\n") {
+		match := vadLinePattern.FindStringSubmatch(line)
+		if len(match) != 2 {
+			continue
+		}
+		text := strings.TrimSpace(match[1])
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func findFirst(root string, names ...string) (string, error) {

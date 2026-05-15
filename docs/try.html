@@ -144,7 +144,7 @@ ffmpeg -y -i "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.m
 
       <section>
         <h2>3. Install assets</h2>
-        <p>Install sherpa-onnx runtime and model assets into the default user data dir.</p>
+        <p>Install sherpa-onnx runtime and model assets into the default user data dir: SEACO/Paraformer ASR, CT-Transformer punctuation, and Silero VAD.</p>
         <pre><code>onnx-transcribe setup</code></pre>
         <p>For an offline install, put archives in a local directory and use:</p>
         <pre><code>onnx-transcribe setup --from-dir ./downloads</code></pre>
@@ -169,10 +169,19 @@ ffmpeg -y -i "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.m
       </section>
 
       <section>
-        <h2>6. Inspect output</h2>
+        <h2>6. Run the full MP4</h2>
+        <p>VAD is on by default. This avoids sending a 14-minute WAV into one Paraformer call.</p>
+        <pre><code>onnx-transcribe \
+  "testdata/media/space-illusion-720p-h265.mp4" \
+  --threads 8 \
+  --out testdata/transcript.full.md</code></pre>
+      </section>
+
+      <section>
+        <h2>7. Inspect output</h2>
         <p>Review readability, punctuation, runtime, and hallucination around silence or music.</p>
-        <pre><code>open testdata/transcript.smoke.md
-wc -m testdata/transcript.smoke.md</code></pre>
+        <pre><code>open testdata/transcript.full.md
+wc -m testdata/transcript.full.md</code></pre>
       </section>
     </div>
 
@@ -181,9 +190,8 @@ wc -m testdata/transcript.smoke.md</code></pre>
       <ul>
         <li>Research hotword support outside the current sherpa-onnx offline Paraformer path.</li>
         <li>Add a known SHA256 for the SEACO/Paraformer ASR archive or document why GitHub does not expose one.</li>
-        <li>Check Chinese accuracy, punctuation quality, runtime, and silence/music hallucination on the short verified path.</li>
-        <li>Design chunking separately, with overlap and de-duplication, after the short unchunked path works.</li>
-        <li>Add VAD only if the first end-to-end run has silence or music hallucination problems.</li>
+        <li>Check Chinese accuracy, punctuation quality, runtime, and silence/music hallucination on the default VAD path.</li>
+        <li>Research whether VAD parameters need user-facing knobs for noisy video.</li>
         <li>Add Windows and Linux smoke tests after the macOS SEACO plus CT-Transformer path works.</li>
         <li>Decide whether to bundle ffmpeg or keep system ffmpeg as a documented prerequisite.</li>
       </ul>

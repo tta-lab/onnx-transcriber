@@ -188,14 +188,14 @@ onnx-transcribe --help</code></pre>
 
       <section>
         <h2>3. Install runtime and models</h2>
-        <p>This downloads sherpa-onnx runtime, SEACO/Paraformer ASR, and CT-Transformer punctuation into <code>%LOCALAPPDATA%\onnx-transcriber</code>.</p>
+        <p>This downloads sherpa-onnx runtime, SEACO/Paraformer ASR, CT-Transformer punctuation, and Silero VAD into <code>%LOCALAPPDATA%\onnx-transcriber</code>.</p>
         <pre><code>onnx-transcribe setup</code></pre>
         <p>Because aria2 is installed, setup should show compact download progress with resume support.</p>
       </section>
 
       <section>
         <h2>4. Check setup</h2>
-        <p>Doctor should find ffmpeg, sherpa binaries, ASR model files, and punctuation model files.</p>
+        <p>Doctor should find ffmpeg, sherpa binaries, ASR model files, punctuation model files, and the VAD model.</p>
         <pre><code>onnx-transcribe doctor</code></pre>
       </section>
 
@@ -211,7 +211,11 @@ ffmpeg -y -i "$env:USERPROFILE\Downloads\131202 №30431 时空的虚幻 H265-�
         <pre><code>onnx-transcribe testdata\media\space-illusion-30s.mp4 `
   --threads 8 `
   --out testdata\transcript.smoke.md</code></pre>
-        <p>Open <code>testdata\transcript.smoke.md</code> and check Mandarin accuracy, punctuation quality, runtime, and hallucination around silence or music.</p>
+        <p>VAD is on by default. For the full MP4, use the same command shape with the full file path and write <code>testdata\transcript.full.md</code>.</p>
+        <pre><code>onnx-transcribe testdata\media\space-illusion-720p-h265.mp4 `
+  --threads 8 `
+  --out testdata\transcript.full.md</code></pre>
+        <p>Open the Markdown output and check Mandarin accuracy, punctuation quality, runtime, and hallucination around silence or music.</p>
       </section>
 
       <section class="warn">
