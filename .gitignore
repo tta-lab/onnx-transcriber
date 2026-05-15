@@ -1,0 +1,4 @@
+*.mp4
+*.wav
+testdata/*.smoke.md
+testdata/media/

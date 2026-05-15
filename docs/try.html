@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>onnx-transcriber trial guide</title>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #52606d;
+      --paper: #f7f2e8;
+      --card: #fffaf0;
+      --line: #d8cdbb;
+      --accent: #0f766e;
+      --code: #18212f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 32rem),
+        linear-gradient(135deg, #f7f2e8 0%, #efe4d0 100%);
+      font-family: Charter, "Iowan Old Style", Georgia, serif;
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(980px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0;
+    }
+
+    header {
+      border-bottom: 2px solid var(--ink);
+      margin-bottom: 28px;
+      padding-bottom: 22px;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 6vw, 4.8rem);
+      line-height: 0.95;
+      margin: 0 0 16px;
+      letter-spacing: -0.05em;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      margin: 0 0 12px;
+    }
+
+    p {
+      max-width: 68ch;
+    }
+
+    .lede {
+      color: var(--muted);
+      font-size: 1.15rem;
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    section {
+      background: color-mix(in srgb, var(--card) 88%, white);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 45px rgba(31, 41, 51, 0.08);
+      padding: 22px;
+    }
+
+    ol,
+    ul {
+      padding-left: 1.25rem;
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    code,
+    pre {
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    pre {
+      background: var(--code);
+      border-radius: 14px;
+      color: #f8fafc;
+      overflow-x: auto;
+      padding: 14px 16px;
+      white-space: pre-wrap;
+    }
+
+    .callout {
+      border-left: 6px solid var(--accent);
+    }
+
+    .tag {
+      background: rgba(15, 118, 110, 0.12);
+      border: 1px solid rgba(15, 118, 110, 0.28);
+      border-radius: 999px;
+      color: var(--accent);
+      display: inline-block;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.82rem;
+      padding: 4px 10px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <span class="tag">local smoke guide</span>
+      <h1>Try onnx-transcribe</h1>
+      <p class="lede">Use this page as the short path from a fresh checkout to a local MP4 transcription run.</p>
+    </header>
+
+    <div class="grid">
+      <section class="callout">
+        <h2>1. Check the repo</h2>
+        <p>Build and test the Go scaffold first.</p>
+        <pre><code>go test ./...
+go run ./cmd/onnx-transcribe --help
+go run ./cmd/onnx-transcribe models list</code></pre>
+      </section>
+
+      <section>
+        <h2>2. Confirm the fixture</h2>
+        <p>The local MP4 is ignored by Git. It should exist here:</p>
+        <pre><code>testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4</code></pre>
+        <p>If it is missing, restore it from Downloads:</p>
+        <pre><code>mkdir -p testdata/media
+cp "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.mp4" testdata/media/</code></pre>
+      </section>
+
+      <section>
+        <h2>3. Install assets</h2>
+        <p>Install sherpa-onnx runtime and model assets into the default user data dir.</p>
+        <pre><code>go run ./cmd/onnx-transcribe setup</code></pre>
+        <p>For an offline install, put archives in a local directory and use:</p>
+        <pre><code>go run ./cmd/onnx-transcribe setup --from-dir ./downloads</code></pre>
+      </section>
+
+      <section>
+        <h2>4. Check setup</h2>
+        <p>Doctor should find ffmpeg, sherpa binaries, and model directories.</p>
+        <pre><code>go run ./cmd/onnx-transcribe doctor</code></pre>
+        <p>Current expected pre-setup result: ffmpeg is found, sherpa binaries and model directories are missing.</p>
+      </section>
+
+      <section>
+        <h2>5. Run the MP4 smoke test</h2>
+        <p>The script writes an ignored Markdown output file.</p>
+        <pre><code>sh scripts/smoke-mp4.sh</code></pre>
+        <p>Direct command shape:</p>
+        <pre><code>go run ./cmd/onnx-transcribe \
+  "testdata/media/131202 №30431 时空的虚幻 H265-高清-720P.mp4" \
+  --hotwords testdata/hotwords.txt \
+  --out testdata/transcript.smoke.md</code></pre>
+      </section>
+
+      <section>
+        <h2>6. Inspect output</h2>
+        <p>Review readability, hotword hits, punctuation, and hallucination around silence or music.</p>
+        <pre><code>open testdata/transcript.smoke.md
+wc -m testdata/transcript.smoke.md</code></pre>
+      </section>
+    </div>
+
+    <section>
+      <h2>Remaining TODO</h2>
+      <ul>
+        <li>Verify the exact sherpa-onnx ASR command flags against the installed <code>v1.13.0</code> binary.</li>
+        <li>Verify punctuation CLI stdin/stdout behavior and adjust the runner if the binary expects file arguments.</li>
+        <li>Add a known SHA256 for the SEACO/Paraformer ASR archive or document why GitHub does not expose one.</li>
+        <li>Find and verify the Silero VAD model URL, checksum, and runtime flags.</li>
+        <li>Run the local MP4 through the full pipeline and record accuracy, hotword hit rate, runtime, and hallucination notes.</li>
+        <li>Add a benchmark command for comparing SEACO/Paraformer, Zipformer ZH-EN, Paraformer ZH, and SenseVoice as a reference.</li>
+        <li>Improve punctuation chunking for long transcripts before feeding CT-Transformer.</li>
+        <li>Add Windows and Linux smoke tests once macOS works end to end.</li>
+        <li>Decide whether to bundle ffmpeg or keep system ffmpeg as a documented prerequisite.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
