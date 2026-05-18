@@ -76,10 +76,6 @@ func setup(args []string, stdout io.Writer) error {
 	if err := inst.InstallModel(*modelName, *fromDir); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, "installing punctuation model: ct-transformer-zh-en")
-	if err := inst.InstallModel("ct-transformer-zh-en", *fromDir); err != nil {
-		return err
-	}
 	fmt.Fprintln(stdout, "installing VAD model: silero-vad")
 	if err := inst.InstallModel("silero-vad", *fromDir); err != nil {
 		return err
@@ -158,7 +154,6 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	keepTemp := fs.Bool("keep-temp", false, "keep temporary working directory")
 	threads := fs.Int("threads", runtime.NumCPU(), "ASR CPU threads")
 	noVAD := fs.Bool("no-vad", false, "disable Silero VAD before offline ASR")
-	noPunctuation := fs.Bool("no-punctuation", false, "disable CT-Transformer punctuation")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -170,7 +165,7 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	r := runner{home: home, stderr: stderr}
-	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD, !*noPunctuation)
+	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD)
 	if err != nil {
 		return err
 	}
@@ -217,7 +212,7 @@ func defaultModelForBackend(backend string) (string, error) {
 	}
 }
 
-func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD, usePunctuation bool) (string, error) {
+func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD bool) (string, error) {
 	workDir, err := os.MkdirTemp("", "onnx-transcribe-*")
 	if err != nil {
 		return "", err
@@ -244,22 +239,8 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 		return "", errors.New("ASR returned no text")
 	}
 
-	punctuated := rawText
-	if shouldPunctuate(usePunctuation) {
-		if punctBin, err := r.binary("sherpa-onnx-offline-punctuation"); err == nil {
-			punct, err := r.punctuate(punctBin, punctuated)
-			if err == nil && strings.TrimSpace(punct) != "" {
-				punctuated = punct
-			}
-		}
-	}
-
-	body := paragraph.Format(punctuated, paragraph.Options{SentencesPerParagraph: 3, MaxChars: 500})
+	body := paragraph.Format(rawText, paragraph.Options{SentencesPerParagraph: 3, MaxChars: 500})
 	return "# Transcript\n\n" + body + "\n", nil
-}
-
-func shouldPunctuate(usePunctuation bool) bool {
-	return usePunctuation
 }
 
 func (r runner) asrConfig(modelName, hotwordsPath string, threads int, useVAD bool) (asrConfig, error) {
@@ -370,24 +351,6 @@ func buildASRArgs(cfg asrConfig, wav string) []string {
 		wav,
 	)
 	return args
-}
-
-func (r runner) punctuate(bin, text string) (string, error) {
-	modelDir := config.ModelDir(r.home, "ct-transformer-zh-en")
-	model, err := findFirst(modelDir, "model.int8.onnx", "model.onnx")
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.Command(bin, "--ct-transformer="+model, "--print-args=false", text)
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	err = cmd.Run()
-	if err != nil && stderr.Len() > 0 {
-		_, _ = io.Copy(r.stderr, &stderr)
-	}
-	return out.String(), err
 }
 
 func (r runner) binary(name string) (string, error) {

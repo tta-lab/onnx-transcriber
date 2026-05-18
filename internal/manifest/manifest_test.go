@@ -13,12 +13,8 @@ func TestDefaultManifestContainsVerifiedMacRuntimeAndCoreModels(t *testing.T) {
 		t.Fatalf("runtime asset is not installable: %#v", runtimeAsset)
 	}
 
-	punct, ok := m.Models["ct-transformer-zh-en"]
-	if !ok {
-		t.Fatal("missing ct-transformer-zh-en model")
-	}
-	if len(punct.Files) == 0 || punct.Files[0].SHA256 == "" {
-		t.Fatalf("punctuation model file must include sha256: %#v", punct)
+	if _, ok := m.Models["ct-transformer-zh-en"]; ok {
+		t.Fatal("ct-transformer-zh-en should not be in default manifest")
 	}
 }
 

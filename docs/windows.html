@@ -156,11 +156,11 @@
     <header>
       <div>
         <span class="tag">Windows RTX 3070 Ti path</span>
-        <h1>Run the SEACO pipeline</h1>
+        <h1>Run the Nano pipeline</h1>
       </div>
       <div class="hero-card">
         <h2>Goal</h2>
-        <p>Get one path working on Windows: MP4 input, SEACO/Paraformer ASR, CT-Transformer punctuation, Markdown output.</p>
+        <p>Get one path working on Windows: MP4 input, FunASR-Nano ASR, Markdown output.</p>
         <p>CUDA is not required for this first pass. Start CPU-only unless runtime is too slow.</p>
       </div>
     </header>
@@ -188,14 +188,14 @@ onnx-transcribe --help</code></pre>
 
       <section>
         <h2>3. Install runtime and models</h2>
-        <p>This downloads sherpa-onnx runtime, SEACO/Paraformer ASR, CT-Transformer punctuation, and Silero VAD into <code>%LOCALAPPDATA%\onnx-transcriber</code>.</p>
+        <p>This downloads sherpa-onnx runtime, FunASR-Nano ASR, and Silero VAD into <code>%LOCALAPPDATA%\onnx-transcriber</code>.</p>
         <pre><code>onnx-transcribe setup</code></pre>
         <p>Because aria2 is installed, setup should show compact download progress with resume support.</p>
       </section>
 
       <section>
         <h2>4. Check setup</h2>
-        <p>Doctor should find ffmpeg, sherpa binaries, ASR model files, punctuation model files, and the VAD model.</p>
+        <p>Doctor should find ffmpeg, sherpa binaries, ASR model files, and the VAD model.</p>
         <pre><code>onnx-transcribe doctor</code></pre>
       </section>
 

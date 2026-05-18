@@ -144,7 +144,7 @@ ffmpeg -y -i "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.m
 
       <section>
         <h2>3. Install assets</h2>
-        <p>Install sherpa-onnx runtime and model assets into the default user data dir: SEACO/Paraformer ASR, CT-Transformer punctuation, and Silero VAD.</p>
+        <p>Install sherpa-onnx runtime and model assets into the default user data dir: FunASR-Nano ASR and Silero VAD.</p>
         <pre><code>onnx-transcribe setup</code></pre>
         <p>For an offline install, put archives in a local directory and use:</p>
         <pre><code>onnx-transcribe setup --from-dir ./downloads</code></pre>
@@ -170,7 +170,7 @@ ffmpeg -y -i "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.m
 
       <section>
         <h2>6. Run the full MP4</h2>
-        <p>VAD is on by default. This avoids sending a 14-minute WAV into one Paraformer call.</p>
+        <p>VAD is on by default. This avoids sending a long WAV into one offline ASR call.</p>
         <pre><code>onnx-transcribe \
   "testdata/media/space-illusion-720p-h265.mp4" \
   --threads 8 \
@@ -188,11 +188,11 @@ wc -m testdata/transcript.full.md</code></pre>
     <section>
       <h2>Remaining TODO</h2>
       <ul>
-        <li>Research hotword support outside the current sherpa-onnx offline Paraformer path.</li>
-        <li>Add a known SHA256 for the SEACO/Paraformer ASR archive or document why GitHub does not expose one.</li>
+        <li>Compare Nano output with and without hotwords on domain-heavy lecture samples.</li>
+        <li>Add a known SHA256 for the Nano ASR archive or document why GitHub does not expose one.</li>
         <li>Check Chinese accuracy, punctuation quality, runtime, and silence/music hallucination on the default VAD path.</li>
         <li>Research whether VAD parameters need user-facing knobs for noisy video.</li>
-        <li>Add Windows and Linux smoke tests after the macOS SEACO plus CT-Transformer path works.</li>
+        <li>Add Windows and Linux smoke tests after the macOS Nano path works.</li>
         <li>Decide whether to bundle ffmpeg or keep system ffmpeg as a documented prerequisite.</li>
       </ul>
     </section>
