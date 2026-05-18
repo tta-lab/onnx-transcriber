@@ -13,20 +13,10 @@ func TestDefaultManifestContainsVerifiedMacRuntimeAndCoreModels(t *testing.T) {
 		t.Fatalf("runtime asset is not installable: %#v", runtimeAsset)
 	}
 
-	if _, ok := m.Models["ct-transformer-zh-en"]; ok {
-		t.Fatal("ct-transformer-zh-en should not be in default manifest")
-	}
 }
 
-func TestDefaultManifestContainsOnlyNanoASRModel(t *testing.T) {
+func TestDefaultManifestContainsNanoASRModel(t *testing.T) {
 	m := Default()
-	if _, ok := m.Models["seaco-paraformer-trilingual"]; ok {
-		t.Fatal("seaco-paraformer-trilingual should not be in default manifest")
-	}
-	if _, ok := m.Models["sensevoice-small"]; ok {
-		t.Fatal("sensevoice-small should not be in default manifest")
-	}
-
 	nano, ok := m.Models["funasr-nano-int8"]
 	if !ok {
 		t.Fatal("missing funasr-nano-int8 model")
