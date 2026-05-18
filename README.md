@@ -39,6 +39,7 @@ onnx-transcribe setup --data-dir ./vendor/onnx-transcriber
 ## Current Caveats
 
 - FunASR-Nano is the only ASR backend. `--hotwords` passes prompt hotwords to sherpa-onnx.
+- CPU runtime is the default. Windows CUDA is opt-in with `--runtime cuda` for `setup`, `doctor`, and transcription.
 - Hotwords can improve domain-term hits, but early lecture testing showed a possible content-recall risk. Compare output with and without hotwords before using a large term list.
 - The Nano ASR archive does not publish a checked-in GitHub asset digest, so the downloader cannot verify it yet without a separate known SHA256 value.
 - The first smoke test for a new runtime should verify `onnx-transcribe doctor` and compare quality on the same Mandarin lecture clip.

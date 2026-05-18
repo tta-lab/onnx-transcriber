@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +82,38 @@ func TestBuildASRArgsForNanoPassesHotwords(t *testing.T) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buildASRArgs() = %#v, want %#v", got, want)
+	}
+}
+
+func TestRuntimePlatformKeyUsesCUDAVariant(t *testing.T) {
+	got, err := runtimePlatformKey("windows-amd64", "cuda")
+	if err != nil {
+		t.Fatalf("runtimePlatformKey returned error: %v", err)
+	}
+	if got != "windows-amd64-cuda" {
+		t.Fatalf("runtimePlatformKey() = %q, want windows-amd64-cuda", got)
+	}
+}
+
+func TestRuntimePlatformKeyRejectsUnknownRuntime(t *testing.T) {
+	if _, err := runtimePlatformKey("windows-amd64", "directml"); err == nil {
+		t.Fatal("runtimePlatformKey accepted unknown runtime")
+	}
+}
+
+func TestCUDARuntimeDoesNotFallBackToPath(t *testing.T) {
+	r := runner{
+		home:            t.TempDir(),
+		runtimeName:     "cuda",
+		runtimePlatform: "windows-amd64-cuda",
+		stderr:          &bytes.Buffer{},
+	}
+
+	_, err := r.binary("sherpa-onnx-vad-with-offline-asr")
+	if err == nil {
+		t.Fatal("binary returned nil error")
+	}
+	if !strings.Contains(err.Error(), "CUDA runtime not installed; run onnx-transcribe setup --runtime cuda") {
+		t.Fatalf("binary error = %q", err)
 	}
 }

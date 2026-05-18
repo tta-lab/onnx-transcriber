@@ -81,6 +81,12 @@ func Default() Manifest {
 						SHA256:     "21e86a35fd2cd7b61b0f0d7f2dcb6dfac3e4e97910690a0be213ff9f02b86f19",
 						Binaries:   []string{"sherpa-onnx-offline.exe", "sherpa-onnx-vad-with-offline-asr.exe"},
 					},
+					"windows-amd64-cuda": {
+						ArchiveURL: "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-v1.13.2-cuda-12.x-cudnn-9.x-win-x64-cuda.tar.bz2",
+						URL:        "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-v1.13.2-cuda-12.x-cudnn-9.x-win-x64-cuda.tar.bz2",
+						SHA256:     "4ba8f4633ec653c2b1abf0bf9c57e78fb63b42f70fcd2d31083599a3ac48e4f9",
+						Binaries:   []string{"sherpa-onnx-offline.exe", "sherpa-onnx-vad-with-offline-asr.exe"},
+					},
 				},
 			},
 		},

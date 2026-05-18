@@ -161,7 +161,7 @@
       <div class="hero-card">
         <h2>Goal</h2>
         <p>Get one path working on Windows: MP4 input, FunASR-Nano ASR, Markdown output.</p>
-        <p>CUDA is not required for this first pass. Start CPU-only unless runtime is too slow.</p>
+        <p>CPU is the default path. CUDA is opt-in for NVIDIA machines where CPU runtime is too slow.</p>
       </div>
     </header>
 
@@ -227,11 +227,23 @@ ffmpeg -y -i "$env:USERPROFILE\Downloads\131202 №30431 时空的虚幻 H265-�
         </ul>
       </section>
 
+      <section class="wide">
+        <h2>CUDA opt-in</h2>
+        <p>Use this only on Windows x64 with an NVIDIA GPU, a current NVIDIA driver, CUDA 12.x, cuDNN 9.x, and the Microsoft Visual C++ runtime. CPU remains supported while CUDA setup is being fixed.</p>
+        <pre><code>onnx-transcribe setup --runtime cuda
+onnx-transcribe doctor --runtime cuda
+onnx-transcribe testdata\media\space-illusion-30s.mp4 `
+  --runtime cuda `
+  --threads 8 `
+  --out testdata\transcript.cuda.md</code></pre>
+        <p>If CUDA was requested and cannot launch, the command fails instead of falling back to CPU. Run <code>onnx-transcribe doctor --runtime cuda</code> and check <code>nvidia-smi</code>, driver version, CUDA/cuDNN <code>bin</code> paths, and missing DLL errors such as <code>LoadLibrary failed with error 126</code>.</p>
+      </section>
+
       <section class="error">
         <h2>Not in scope yet</h2>
         <ul>
           <li>No model bake-off command.</li>
-          <li>No CUDA setup until CPU runtime proves too slow.</li>
+          <li>No automatic CPU fallback after <code>--runtime cuda</code>.</li>
           <li>No bundled ffmpeg until system ffmpeg proves too painful.</li>
         </ul>
       </section>

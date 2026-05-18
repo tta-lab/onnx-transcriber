@@ -22,6 +22,11 @@ import (
 	"github.com/guion-opensource/onnx-transcriber/internal/paragraph"
 )
 
+const (
+	runtimeCPU  = "cpu"
+	runtimeCUDA = "cuda"
+)
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -55,8 +60,13 @@ func setup(args []string, stdout io.Writer) error {
 	modelName := fs.String("model", "funasr-nano-int8", "ASR model to install")
 	dataDir := fs.String("data-dir", "", "override data directory")
 	fromDir := fs.String("from-dir", "", "install from local downloads directory")
+	runtimeName := fs.String("runtime", runtimeCPU, "runtime to install: cpu or cuda")
 	_ = fs.Bool("with-ffmpeg", false, "reserved for future ffmpeg bundling")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	runtimePlatform, err := runtimePlatformKey(config.CurrentPlatformKey(), *runtimeName)
+	if err != nil {
 		return err
 	}
 
@@ -68,8 +78,8 @@ func setup(args []string, stdout io.Writer) error {
 	if err := inst.EnsureDirs(); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, "installing sherpa-onnx runtime")
-	if err := inst.InstallRuntime("sherpa-onnx", *fromDir); err != nil {
+	fmt.Fprintln(stdout, "installing sherpa-onnx runtime:", *runtimeName)
+	if err := inst.InstallRuntimePlatform("sherpa-onnx", runtimePlatform, *fromDir); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "installing ASR model:", *modelName)
@@ -80,7 +90,7 @@ func setup(args []string, stdout io.Writer) error {
 	if err := inst.InstallModel("silero-vad", *fromDir); err != nil {
 		return err
 	}
-	r := doctor.Run(home, doctor.Options{ModelName: *modelName, UseVAD: true})
+	r := doctor.Run(home, doctor.Options{ModelName: *modelName, UseVAD: true, Runtime: *runtimeName})
 	doctor.Write(stdout, r)
 	fmt.Fprintln(stdout, "example: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	return nil
@@ -91,15 +101,19 @@ func doctorCmd(args []string, stdout io.Writer) error {
 	fs.SetOutput(stdout)
 	modelName := fs.String("model", "funasr-nano-int8", "ASR model to check")
 	dataDir := fs.String("data-dir", "", "override data directory")
+	runtimeName := fs.String("runtime", runtimeCPU, "runtime to check: cpu or cuda")
 	noVAD := fs.Bool("no-vad", false, "disable VAD model check")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if _, err := runtimePlatformKey(config.CurrentPlatformKey(), *runtimeName); err != nil {
 		return err
 	}
 	home, err := resolveHome(*dataDir)
 	if err != nil {
 		return err
 	}
-	r := doctor.Run(home, doctor.Options{ModelName: *modelName, UseVAD: !*noVAD})
+	r := doctor.Run(home, doctor.Options{ModelName: *modelName, UseVAD: !*noVAD, Runtime: *runtimeName})
 	doctor.Write(stdout, r)
 	if !r.OK {
 		return errors.New("setup is incomplete")
@@ -150,6 +164,7 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	hotwords := fs.String("hotwords", "", "hotwords file")
 	out := fs.String("out", "transcript.md", "markdown output path")
 	dataDir := fs.String("data-dir", "", "override data directory")
+	runtimeName := fs.String("runtime", runtimeCPU, "runtime to use: cpu or cuda")
 	hotwordsScore := fs.Float64("hotwords-score", 1.5, "hotwords score")
 	keepTemp := fs.Bool("keep-temp", false, "keep temporary working directory")
 	threads := fs.Int("threads", runtime.NumCPU(), "ASR CPU threads")
@@ -160,11 +175,15 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	if fs.NArg() != 1 {
 		return errors.New("usage: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	}
+	runtimePlatform, err := runtimePlatformKey(config.CurrentPlatformKey(), *runtimeName)
+	if err != nil {
+		return err
+	}
 	home, err := resolveHome(*dataDir)
 	if err != nil {
 		return err
 	}
-	r := runner{home: home, stderr: stderr}
+	r := runner{home: home, runtimeName: *runtimeName, runtimePlatform: runtimePlatform, stderr: stderr}
 	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD)
 	if err != nil {
 		return err
@@ -187,8 +206,10 @@ func normalizeTranscribeArgs(args []string) []string {
 }
 
 type runner struct {
-	home   string
-	stderr io.Writer
+	home            string
+	runtimeName     string
+	runtimePlatform string
+	stderr          io.Writer
 }
 
 type asrConfig struct {
@@ -311,7 +332,7 @@ func (r runner) runASR(wav string, cfg asrConfig) (string, error) {
 		}
 		raw, err := outputCommand(r.stderr, asrBin, buildASRArgs(cfg, wav)...)
 		if err != nil {
-			return "", err
+			return "", r.runtimeCommandError(err)
 		}
 		return extractVADText(raw), nil
 	}
@@ -322,9 +343,16 @@ func (r runner) runASR(wav string, cfg asrConfig) (string, error) {
 	}
 	raw, err := outputCommand(r.stderr, asrBin, buildASRArgs(cfg, wav)...)
 	if err != nil {
-		return "", err
+		return "", r.runtimeCommandError(err)
 	}
 	return extractASRText(raw), nil
+}
+
+func (r runner) runtimeCommandError(err error) error {
+	if r.runtimeName != runtimeCUDA {
+		return err
+	}
+	return fmt.Errorf("CUDA runtime failed; run onnx-transcribe doctor --runtime cuda: %w", err)
 }
 
 func buildASRArgs(cfg asrConfig, wav string) []string {
@@ -354,17 +382,35 @@ func buildASRArgs(cfg asrConfig, wav string) []string {
 }
 
 func (r runner) binary(name string) (string, error) {
-	if filepath.Separator == '\\' {
+	if strings.HasPrefix(r.runtimePlatform, "windows-") {
 		name += ".exe"
 	}
-	root := config.RuntimeBinDir(r.home, config.CurrentPlatformKey())
+	platform := r.runtimePlatform
+	if platform == "" {
+		platform = config.CurrentPlatformKey()
+	}
+	root := config.RuntimeBinDir(r.home, platform)
 	if local, err := findRuntimeBinary(root, name); err == nil {
 		return local, nil
+	}
+	if r.runtimeName == runtimeCUDA {
+		return "", errors.New("CUDA runtime not installed; run onnx-transcribe setup --runtime cuda")
 	}
 	if path, err := exec.LookPath(name); err == nil {
 		return path, nil
 	}
 	return "", fmt.Errorf("%s not found; run onnx-transcribe setup", name)
+}
+
+func runtimePlatformKey(basePlatform, runtimeName string) (string, error) {
+	switch runtimeName {
+	case "", runtimeCPU:
+		return basePlatform, nil
+	case runtimeCUDA:
+		return basePlatform + "-cuda", nil
+	default:
+		return "", fmt.Errorf("unknown runtime %q; use cpu or cuda", runtimeName)
+	}
 }
 
 func findRuntimeBinary(root, name string) (string, error) {
@@ -496,8 +542,8 @@ func resolveHome(override string) (string, error) {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "onnx-transcribe input.mp4 --threads 8 --out transcript.md")
-	fmt.Fprintln(w, "onnx-transcribe setup")
+	fmt.Fprintln(w, "onnx-transcribe setup [--runtime cpu|cuda]")
 	fmt.Fprintln(w, "onnx-transcribe models list")
 	fmt.Fprintln(w, "onnx-transcribe models install <name>")
-	fmt.Fprintln(w, "onnx-transcribe doctor")
+	fmt.Fprintln(w, "onnx-transcribe doctor [--runtime cpu|cuda]")
 }

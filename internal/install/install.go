@@ -40,20 +40,24 @@ func (i Installer) EnsureDirs() error {
 }
 
 func (i Installer) InstallRuntime(name, fromDir string) error {
+	return i.InstallRuntimePlatform(name, config.CurrentPlatformKey(), fromDir)
+}
+
+func (i Installer) InstallRuntimePlatform(name, platform, fromDir string) error {
 	rt, ok := i.Manifest.Runtimes[name]
 	if !ok {
 		return fmt.Errorf("unknown runtime %q", name)
 	}
-	asset, ok := rt.Platforms[config.CurrentPlatformKey()]
+	asset, ok := rt.Platforms[platform]
 	if !ok {
-		return fmt.Errorf("runtime %q does not support %s", name, config.CurrentPlatformKey())
+		return fmt.Errorf("runtime %q does not support %s", name, platform)
 	}
 
 	archive, err := i.fetch(asset.URL, asset.SHA256, fromDir)
 	if err != nil {
 		return err
 	}
-	dest := config.RuntimeBinDir(i.Home, config.CurrentPlatformKey())
+	dest := config.RuntimeBinDir(i.Home, platform)
 	if err := ExtractTarBz2(archive, dest); err != nil {
 		return err
 	}

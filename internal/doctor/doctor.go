@@ -20,15 +20,19 @@ type Result struct {
 type Options struct {
 	ModelName string
 	UseVAD    bool
+	Runtime   string
 }
 
 func Run(home string, opts ...Options) Result {
-	options := Options{ModelName: "funasr-nano-int8", UseVAD: true}
+	options := Options{ModelName: "funasr-nano-int8", UseVAD: true, Runtime: "cpu"}
 	if len(opts) > 0 {
 		options = opts[0]
 	}
 	if options.ModelName == "" {
 		options.ModelName = "funasr-nano-int8"
+	}
+	if options.Runtime == "" {
+		options.Runtime = "cpu"
 	}
 
 	result := Result{OK: true}
@@ -45,9 +49,14 @@ func Run(home string, opts ...Options) Result {
 		check(false, "missing: ffmpeg not found in PATH")
 	}
 
-	binDir := config.RuntimeBinDir(home, config.CurrentPlatformKey())
+	platform := config.CurrentPlatformKey()
+	if options.Runtime == "cuda" {
+		platform += "-cuda"
+		checkNVIDIA(check)
+	}
+	binDir := config.RuntimeBinDir(home, platform)
 	foundBins := map[string]string{}
-	for _, name := range runtimeBinaryNames() {
+	for _, name := range runtimeBinaryNames(platform) {
 		path, err := findExecutable(binDir, name)
 		check(err == nil, status(err == nil, pathOrName(path, name)))
 		if err == nil {
@@ -87,6 +96,21 @@ func Run(home string, opts ...Options) Result {
 	}
 
 	return result
+}
+
+func checkNVIDIA(check func(bool, string)) {
+	path, err := exec.LookPath("nvidia-smi")
+	if err != nil {
+		check(false, "missing: nvidia-smi not found in PATH")
+		return
+	}
+	out, err := exec.Command(path, "--query-gpu=name,driver_version", "--format=csv,noheader").CombinedOutput()
+	if err != nil {
+		check(false, fmt.Sprintf("missing: nvidia-smi failed: %v", err))
+		return
+	}
+	text := strings.TrimSpace(string(out))
+	check(text != "", status(text != "", "NVIDIA GPU "+text))
 }
 
 func checkCapabilities(check func(bool, string), foundBins map[string]string, backend string, useVAD bool) {
@@ -139,8 +163,8 @@ func Write(w io.Writer, r Result) {
 	fmt.Fprintln(w, "doctor: incomplete setup")
 }
 
-func runtimeBinaryNames() []string {
-	if filepath.Separator == '\\' {
+func runtimeBinaryNames(platform string) []string {
+	if strings.HasPrefix(platform, "windows-") {
 		return []string{"sherpa-onnx-offline.exe", "sherpa-onnx-vad-with-offline-asr.exe"}
 	}
 	return []string{"sherpa-onnx-offline", "sherpa-onnx-vad-with-offline-asr"}
