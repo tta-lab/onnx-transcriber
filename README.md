@@ -6,7 +6,7 @@ Local-first MP4 to Markdown transcription using Go orchestration and sherpa-onnx
 go run ./cmd/onnx-transcribe --help
 go run ./cmd/onnx-transcribe setup
 go run ./cmd/onnx-transcribe input.mp4 --threads 8 --out transcript.md
-go run ./cmd/onnx-transcribe input.mp4 --backend nano --hotwords testdata/hotwords.txt --out transcript.md
+go run ./cmd/onnx-transcribe input.mp4 --hotwords testdata/hotwords.txt --out transcript.md
 ```
 
 The binary name is `onnx-transcribe`.
@@ -39,9 +39,10 @@ onnx-transcribe setup --data-dir ./vendor/onnx-transcriber
 
 ## Current Caveats
 
-- `sensevoice` is the default backend. `nano` is available for experimental FunASR-Nano transcription and passes `--hotwords` as prompt hotwords.
-- The SenseVoice and Nano ASR archives do not publish checked-in GitHub asset digests, so the downloader cannot verify them yet without separate known SHA256 values.
-- The first smoke test for a new runtime should verify backend flags with `onnx-transcribe doctor --backend <name>` and compare quality on the same Mandarin lecture clip.
+- FunASR-Nano is the only ASR backend. `--hotwords` passes prompt hotwords to sherpa-onnx.
+- Hotwords can improve domain-term hits, but early lecture testing showed a possible content-recall risk. Compare output with and without hotwords before using a large term list.
+- The Nano ASR archive does not publish a checked-in GitHub asset digest, so the downloader cannot verify it yet without a separate known SHA256 value.
+- The first smoke test for a new runtime should verify `onnx-transcribe doctor` and compare quality on the same Mandarin lecture clip.
 
 ## Local Smoke Fixture
 

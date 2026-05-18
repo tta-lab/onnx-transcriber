@@ -23,12 +23,12 @@ type Options struct {
 }
 
 func Run(home string, opts ...Options) Result {
-	options := Options{ModelName: "sensevoice-small", UseVAD: true}
+	options := Options{ModelName: "funasr-nano-int8", UseVAD: true}
 	if len(opts) > 0 {
 		options = opts[0]
 	}
 	if options.ModelName == "" {
-		options.ModelName = "sensevoice-small"
+		options.ModelName = "funasr-nano-int8"
 	}
 
 	result := Result{OK: true}
@@ -116,8 +116,7 @@ func checkCapabilities(check func(bool, string), foundBins map[string]string, ba
 
 func capabilityFlags(backend string, useVAD bool) map[string][]string {
 	asrFlags := map[string][]string{
-		"sensevoice": {"sense-voice-model"},
-		"nano":       {"funasr-nano-encoder-adaptor", "funasr-nano-hotwords"},
+		"nano": {"funasr-nano-encoder-adaptor", "funasr-nano-hotwords"},
 	}
 	flags, ok := asrFlags[backend]
 	if !ok {

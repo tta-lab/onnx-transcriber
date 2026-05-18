@@ -3,3 +3,4 @@
 testdata/*.smoke.md
 testdata/transcript.*.md
 testdata/media/
+testdata/results/

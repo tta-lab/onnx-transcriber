@@ -22,21 +22,13 @@ func TestDefaultManifestContainsVerifiedMacRuntimeAndCoreModels(t *testing.T) {
 	}
 }
 
-func TestDefaultManifestContainsSenseVoiceAndNanoModels(t *testing.T) {
+func TestDefaultManifestContainsOnlyNanoASRModel(t *testing.T) {
 	m := Default()
 	if _, ok := m.Models["seaco-paraformer-trilingual"]; ok {
 		t.Fatal("seaco-paraformer-trilingual should not be in default manifest")
 	}
-
-	sense, ok := m.Models["sensevoice-small"]
-	if !ok {
-		t.Fatal("missing sensevoice-small model")
-	}
-	if sense.Backend != "sensevoice" {
-		t.Fatalf("sensevoice-small backend = %q, want sensevoice", sense.Backend)
-	}
-	if len(sense.RequiredFiles) == 0 {
-		t.Fatal("sensevoice-small must declare required files")
+	if _, ok := m.Models["sensevoice-small"]; ok {
+		t.Fatal("sensevoice-small should not be in default manifest")
 	}
 
 	nano, ok := m.Models["funasr-nano-int8"]
