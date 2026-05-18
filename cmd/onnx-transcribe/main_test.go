@@ -82,3 +82,12 @@ func TestBuildASRArgsForNanoPassesHotwords(t *testing.T) {
 		t.Fatalf("buildASRArgs() = %#v, want %#v", got, want)
 	}
 }
+
+func TestShouldPunctuate(t *testing.T) {
+	if !shouldPunctuate(true) {
+		t.Fatal("shouldPunctuate(true) = false, want true")
+	}
+	if shouldPunctuate(false) {
+		t.Fatal("shouldPunctuate(false) = true, want false")
+	}
+}

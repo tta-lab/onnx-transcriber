@@ -158,6 +158,7 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	keepTemp := fs.Bool("keep-temp", false, "keep temporary working directory")
 	threads := fs.Int("threads", runtime.NumCPU(), "ASR CPU threads")
 	noVAD := fs.Bool("no-vad", false, "disable Silero VAD before offline ASR")
+	noPunctuation := fs.Bool("no-punctuation", false, "disable CT-Transformer punctuation")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	r := runner{home: home, stderr: stderr}
-	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD)
+	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD, !*noPunctuation)
 	if err != nil {
 		return err
 	}
@@ -216,7 +217,7 @@ func defaultModelForBackend(backend string) (string, error) {
 	}
 }
 
-func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD bool) (string, error) {
+func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD, usePunctuation bool) (string, error) {
 	workDir, err := os.MkdirTemp("", "onnx-transcribe-*")
 	if err != nil {
 		return "", err
@@ -244,14 +245,21 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 	}
 
 	punctuated := rawText
-	if punctBin, err := r.binary("sherpa-onnx-offline-punctuation"); err == nil {
-		if punct, err := r.punctuate(punctBin, punctuated); err == nil && strings.TrimSpace(punct) != "" {
-			punctuated = punct
+	if shouldPunctuate(usePunctuation) {
+		if punctBin, err := r.binary("sherpa-onnx-offline-punctuation"); err == nil {
+			punct, err := r.punctuate(punctBin, punctuated)
+			if err == nil && strings.TrimSpace(punct) != "" {
+				punctuated = punct
+			}
 		}
 	}
 
 	body := paragraph.Format(punctuated, paragraph.Options{SentencesPerParagraph: 3, MaxChars: 500})
 	return "# Transcript\n\n" + body + "\n", nil
+}
+
+func shouldPunctuate(usePunctuation bool) bool {
+	return usePunctuation
 }
 
 func (r runner) asrConfig(modelName, hotwordsPath string, threads int, useVAD bool) (asrConfig, error) {
