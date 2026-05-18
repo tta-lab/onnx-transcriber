@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/guion-opensource/onnx-transcriber/internal/config"
+	"github.com/guion-opensource/onnx-transcriber/internal/manifest"
 )
 
 type Result struct {
@@ -15,7 +17,20 @@ type Result struct {
 	Messages []string
 }
 
-func Run(home string) Result {
+type Options struct {
+	ModelName string
+	UseVAD    bool
+}
+
+func Run(home string, opts ...Options) Result {
+	options := Options{ModelName: "sensevoice-small", UseVAD: true}
+	if len(opts) > 0 {
+		options = opts[0]
+	}
+	if options.ModelName == "" {
+		options.ModelName = "sensevoice-small"
+	}
+
 	result := Result{OK: true}
 	check := func(ok bool, msg string) {
 		if !ok {
@@ -31,18 +46,88 @@ func Run(home string) Result {
 	}
 
 	binDir := config.RuntimeBinDir(home, config.CurrentPlatformKey())
+	foundBins := map[string]string{}
 	for _, name := range runtimeBinaryNames() {
 		path, err := findExecutable(binDir, name)
 		check(err == nil, status(err == nil, pathOrName(path, name)))
+		if err == nil {
+			foundBins[trimExe(name)] = path
+		}
 	}
 
-	asrOK := pathExists(config.ModelDir(home, "seaco-paraformer-trilingual"))
-	check(asrOK, status(asrOK, "ASR model directory"))
+	m := manifest.Default()
+	model, ok := m.Models[options.ModelName]
+	check(ok, status(ok, "ASR model manifest "+options.ModelName))
+	if ok {
+		modelDir := config.ModelDir(home, options.ModelName)
+		asrOK := pathExists(modelDir)
+		check(asrOK, status(asrOK, "ASR model directory "+options.ModelName))
+		for _, file := range model.RequiredFiles {
+			path := filepath.Join(modelDir, file)
+			if !pathExists(path) {
+				path = ""
+				_ = filepath.WalkDir(modelDir, func(candidate string, d os.DirEntry, err error) error {
+					if err != nil || d.IsDir() {
+						return err
+					}
+					if strings.HasSuffix(candidate, file) {
+						path = candidate
+						return filepath.SkipAll
+					}
+					return nil
+				})
+			}
+			check(path != "", status(path != "", "ASR model file "+file))
+		}
+		checkCapabilities(check, foundBins, model.Backend, options.UseVAD)
+	}
 	punctOK := pathExists(config.ModelDir(home, "ct-transformer-zh-en"))
 	check(punctOK, status(punctOK, "punctuation model directory"))
-	vadOK := pathExists(filepath.Join(config.ModelDir(home, "silero-vad"), "silero_vad.onnx"))
-	check(vadOK, status(vadOK, "VAD model"))
+	if options.UseVAD {
+		vadOK := pathExists(filepath.Join(config.ModelDir(home, "silero-vad"), "silero_vad.onnx"))
+		check(vadOK, status(vadOK, "VAD model"))
+	}
 
+	return result
+}
+
+func checkCapabilities(check func(bool, string), foundBins map[string]string, backend string, useVAD bool) {
+	required := capabilityFlags(backend, useVAD)
+	if len(required) == 0 {
+		return
+	}
+
+	for bin, flags := range required {
+		path := foundBins[bin]
+		if path == "" {
+			continue
+		}
+		help, err := exec.Command(path, "--help").CombinedOutput()
+		if err != nil {
+			check(false, fmt.Sprintf("missing: %s --help failed: %v", bin, err))
+			continue
+		}
+		text := string(help)
+		for _, flag := range flags {
+			check(strings.Contains(text, flag), status(strings.Contains(text, flag), bin+" capability "+flag))
+		}
+	}
+}
+
+func capabilityFlags(backend string, useVAD bool) map[string][]string {
+	asrFlags := map[string][]string{
+		"sensevoice": {"sense-voice-model"},
+		"nano":       {"funasr-nano-encoder-adaptor", "funasr-nano-hotwords"},
+	}
+	flags, ok := asrFlags[backend]
+	if !ok {
+		return nil
+	}
+	result := map[string][]string{"sherpa-onnx-offline": flags}
+	if useVAD {
+		vadFlags := append([]string{"silero-vad-model"}, flags...)
+		result["sherpa-onnx-vad-with-offline-asr"] = vadFlags
+	}
 	return result
 }
 
@@ -108,4 +193,8 @@ func pathOrName(path, name string) string {
 		return path
 	}
 	return name
+}
+
+func trimExe(name string) string {
+	return strings.TrimSuffix(name, ".exe")
 }

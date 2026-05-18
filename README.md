@@ -6,6 +6,7 @@ Local-first MP4 to Markdown transcription using Go orchestration and sherpa-onnx
 go run ./cmd/onnx-transcribe --help
 go run ./cmd/onnx-transcribe setup
 go run ./cmd/onnx-transcribe input.mp4 --threads 8 --out transcript.md
+go run ./cmd/onnx-transcribe input.mp4 --backend nano --hotwords testdata/hotwords.txt --out transcript.md
 ```
 
 The binary name is `onnx-transcribe`.
@@ -17,6 +18,7 @@ P0 is mac-first and shells out to:
 - `ffmpeg`
 - `sherpa-onnx-offline`
 - `sherpa-onnx-offline-punctuation`
+- `sherpa-onnx-vad-with-offline-asr`
 
 The Go code owns CLI flags, asset locations, setup, doctor checks, command orchestration, paragraph formatting, and Markdown writing.
 
@@ -37,9 +39,9 @@ onnx-transcribe setup --data-dir ./vendor/onnx-transcriber
 
 ## Current Caveats
 
-- The SEACO/Paraformer ASR archive does not publish a GitHub asset digest, so the downloader cannot verify it yet without a separate known SHA256.
-- Silero VAD is listed in the manifest as a planned model, but its exact verified asset URL is still open.
-- The first smoke test should verify the exact sherpa-onnx punctuation stdin/stdout behavior against the installed `v1.13.0` binary.
+- `sensevoice` is the default backend. `nano` is available for experimental FunASR-Nano transcription and passes `--hotwords` as prompt hotwords.
+- The SenseVoice and Nano ASR archives do not publish checked-in GitHub asset digests, so the downloader cannot verify them yet without separate known SHA256 values.
+- The first smoke test for a new runtime should verify backend flags with `onnx-transcribe doctor --backend <name>` and compare quality on the same Mandarin lecture clip.
 
 ## Local Smoke Fixture
 

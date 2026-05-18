@@ -52,11 +52,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 func setup(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stdout)
-	modelName := fs.String("model", "seaco-paraformer-trilingual", "ASR model to install")
+	backend := fs.String("backend", string(backendSenseVoice), "ASR backend to install: sensevoice, nano")
+	modelName := fs.String("model", "", "ASR model to install; defaults from --backend")
 	dataDir := fs.String("data-dir", "", "override data directory")
 	fromDir := fs.String("from-dir", "", "install from local downloads directory")
 	_ = fs.Bool("with-ffmpeg", false, "reserved for future ffmpeg bundling")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	selectedModel, err := selectedModelName(*backend, *modelName)
+	if err != nil {
 		return err
 	}
 
@@ -72,8 +77,8 @@ func setup(args []string, stdout io.Writer) error {
 	if err := inst.InstallRuntime("sherpa-onnx", *fromDir); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, "installing ASR model:", *modelName)
-	if err := inst.InstallModel(*modelName, *fromDir); err != nil {
+	fmt.Fprintln(stdout, "installing ASR model:", selectedModel)
+	if err := inst.InstallModel(selectedModel, *fromDir); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "installing punctuation model: ct-transformer-zh-en")
@@ -84,7 +89,7 @@ func setup(args []string, stdout io.Writer) error {
 	if err := inst.InstallModel("silero-vad", *fromDir); err != nil {
 		return err
 	}
-	r := doctor.Run(home)
+	r := doctor.Run(home, doctor.Options{ModelName: selectedModel, UseVAD: true})
 	doctor.Write(stdout, r)
 	fmt.Fprintln(stdout, "example: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	return nil
@@ -93,15 +98,22 @@ func setup(args []string, stdout io.Writer) error {
 func doctorCmd(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(stdout)
+	backend := fs.String("backend", string(backendSenseVoice), "ASR backend to check: sensevoice, nano")
+	modelName := fs.String("model", "", "ASR model to check; defaults from --backend")
 	dataDir := fs.String("data-dir", "", "override data directory")
+	noVAD := fs.Bool("no-vad", false, "disable VAD model check")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	selectedModel, err := selectedModelName(*backend, *modelName)
+	if err != nil {
 		return err
 	}
 	home, err := resolveHome(*dataDir)
 	if err != nil {
 		return err
 	}
-	r := doctor.Run(home)
+	r := doctor.Run(home, doctor.Options{ModelName: selectedModel, UseVAD: !*noVAD})
 	doctor.Write(stdout, r)
 	if !r.OK {
 		return errors.New("setup is incomplete")
@@ -112,6 +124,10 @@ func doctorCmd(args []string, stdout io.Writer) error {
 func models(args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] == "list" {
 		for name, model := range manifest.Default().Models {
+			if model.Backend != "" {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\n", name, model.Type, model.Backend)
+				continue
+			}
 			fmt.Fprintf(stdout, "%s\t%s\n", name, model.Type)
 		}
 		return nil
@@ -144,7 +160,8 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	args = normalizeTranscribeArgs(args)
 	fs := flag.NewFlagSet("transcribe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	modelName := fs.String("model", "seaco-paraformer-trilingual", "model registry name")
+	backend := fs.String("backend", string(backendSenseVoice), "ASR backend: sensevoice, nano")
+	modelName := fs.String("model", "", "model registry name; defaults from --backend")
 	hotwords := fs.String("hotwords", "", "hotwords file")
 	out := fs.String("out", "transcript.md", "markdown output path")
 	dataDir := fs.String("data-dir", "", "override data directory")
@@ -158,12 +175,16 @@ func transcribe(args []string, stdout, stderr io.Writer) error {
 	if fs.NArg() != 1 {
 		return errors.New("usage: onnx-transcribe input.mp4 --threads 8 --out transcript.md")
 	}
+	selectedModel, err := selectedModelName(*backend, *modelName)
+	if err != nil {
+		return err
+	}
 	home, err := resolveHome(*dataDir)
 	if err != nil {
 		return err
 	}
 	r := runner{home: home, stderr: stderr}
-	md, err := r.transcribe(fs.Arg(0), *modelName, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD)
+	md, err := r.transcribe(fs.Arg(0), *backend, selectedModel, *hotwords, *hotwordsScore, *keepTemp, *threads, !*noVAD)
 	if err != nil {
 		return err
 	}
@@ -189,7 +210,48 @@ type runner struct {
 	stderr io.Writer
 }
 
-func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD bool) (string, error) {
+type backendName string
+
+const (
+	backendSenseVoice backendName = "sensevoice"
+	backendNano       backendName = "nano"
+)
+
+type asrConfig struct {
+	Backend       backendName
+	Model         string
+	Tokens        string
+	Encoder       string
+	Embedding     string
+	LLM           string
+	Tokenizer     string
+	VADModel      string
+	Hotwords      []string
+	HotwordFile   string
+	Threads       int
+	UseVAD        bool
+	SenseLanguage string
+}
+
+func selectedModelName(backend, modelName string) (string, error) {
+	if modelName != "" {
+		return modelName, nil
+	}
+	return defaultModelForBackend(backend)
+}
+
+func defaultModelForBackend(backend string) (string, error) {
+	switch backendName(backend) {
+	case backendSenseVoice:
+		return "sensevoice-small", nil
+	case backendNano:
+		return "funasr-nano-int8", nil
+	default:
+		return "", fmt.Errorf("unknown backend %q", backend)
+	}
+}
+
+func (r runner) transcribe(input, backend, modelName, hotwords string, hotwordsScore float64, keepTemp bool, threads int, useVAD bool) (string, error) {
 	workDir, err := os.MkdirTemp("", "onnx-transcribe-*")
 	if err != nil {
 		return "", err
@@ -203,21 +265,12 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 		return "", err
 	}
 
-	asrModelDir := config.ModelDir(r.home, modelName)
-	model, err := findFirst(asrModelDir, "model.int8.onnx", "model.onnx")
+	cfg, err := r.asrConfig(backendName(backend), modelName, hotwords, threads, useVAD)
 	if err != nil {
-		return "", fmt.Errorf("ASR model files missing under %s: %w", asrModelDir, err)
-	}
-	tokens, err := findFirst(asrModelDir, "tokens.txt")
-	if err != nil {
-		return "", fmt.Errorf("tokens missing under %s: %w", asrModelDir, err)
+		return "", err
 	}
 
-	if hotwords != "" {
-		fmt.Fprintln(r.stderr, "warning: ignoring --hotwords; sherpa-onnx v1.13.0 Paraformer supports only greedy_search")
-	}
-
-	rawText, err := r.runASR(wav, model, tokens, threads, useVAD)
+	rawText, err := r.runASR(wav, cfg)
 	if err != nil {
 		return "", err
 	}
@@ -236,28 +289,100 @@ func (r runner) transcribe(input, modelName, hotwords string, hotwordsScore floa
 	return "# Transcript\n\n" + body + "\n", nil
 }
 
-func (r runner) runASR(wav, model, tokens string, threads int, useVAD bool) (string, error) {
+func (r runner) asrConfig(backend backendName, modelName, hotwordsPath string, threads int, useVAD bool) (asrConfig, error) {
+	cfg := asrConfig{Backend: backend, Threads: threads, UseVAD: useVAD, SenseLanguage: "zh", HotwordFile: hotwordsPath}
+	asrModelDir := config.ModelDir(r.home, modelName)
+
 	if useVAD {
+		vadModelDir := config.ModelDir(r.home, "silero-vad")
+		vadModel, err := findFirst(vadModelDir, "silero_vad.onnx")
+		if err != nil {
+			return cfg, fmt.Errorf("VAD model missing under %s: %w", vadModelDir, err)
+		}
+		cfg.VADModel = vadModel
+	}
+
+	switch backend {
+	case backendSenseVoice:
+		model, tokens, err := modelAndTokens(asrModelDir)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.Model = model
+		cfg.Tokens = tokens
+		if hotwordsPath != "" {
+			fmt.Fprintln(r.stderr, "warning: ignoring --hotwords; SenseVoice does not expose a supported hotword flag")
+		}
+	case backendNano:
+		encoder, err := findFirst(asrModelDir, "encoder_adaptor.int8.onnx", "encoder_adaptor.onnx")
+		if err != nil {
+			return cfg, fmt.Errorf("FunASR-Nano encoder adaptor missing under %s: %w", asrModelDir, err)
+		}
+		embedding, err := findFirst(asrModelDir, "embedding.int8.onnx", "embedding.onnx")
+		if err != nil {
+			return cfg, fmt.Errorf("FunASR-Nano embedding missing under %s: %w", asrModelDir, err)
+		}
+		llm, err := findFirst(asrModelDir, "llm.int8.onnx", "llm.fp16.onnx", "llm.onnx")
+		if err != nil {
+			return cfg, fmt.Errorf("FunASR-Nano LLM missing under %s: %w", asrModelDir, err)
+		}
+		tokenizer, err := findDir(asrModelDir, "Qwen3-0.6B")
+		if err != nil {
+			return cfg, fmt.Errorf("FunASR-Nano tokenizer missing under %s: %w", asrModelDir, err)
+		}
+		cfg.Encoder = encoder
+		cfg.Embedding = embedding
+		cfg.LLM = llm
+		cfg.Tokenizer = tokenizer
+		cfg.Hotwords, err = readHotwords(hotwordsPath)
+		if err != nil {
+			return cfg, err
+		}
+	default:
+		return cfg, fmt.Errorf("unknown backend %q", backend)
+	}
+
+	return cfg, nil
+}
+
+func modelAndTokens(modelDir string) (string, string, error) {
+	model, err := findFirst(modelDir, "model.int8.onnx", "model.onnx")
+	if err != nil {
+		return "", "", fmt.Errorf("ASR model files missing under %s: %w", modelDir, err)
+	}
+	tokens, err := findFirst(modelDir, "tokens.txt")
+	if err != nil {
+		return "", "", fmt.Errorf("tokens missing under %s: %w", modelDir, err)
+	}
+	return model, tokens, nil
+}
+
+func readHotwords(path string) ([]string, error) {
+	if path == "" {
+		return nil, nil
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var words []string
+	for _, line := range strings.Split(string(content), "\n") {
+		word := strings.TrimSpace(line)
+		if word == "" || strings.HasPrefix(word, "#") {
+			continue
+		}
+		words = append(words, word)
+	}
+	return words, nil
+}
+
+func (r runner) runASR(wav string, cfg asrConfig) (string, error) {
+	if cfg.UseVAD {
 		asrBin, err := r.binary("sherpa-onnx-vad-with-offline-asr")
 		if err != nil {
 			return "", err
 		}
-		vadModelDir := config.ModelDir(r.home, "silero-vad")
-		vadModel, err := findFirst(vadModelDir, "silero_vad.onnx")
-		if err != nil {
-			return "", fmt.Errorf("VAD model missing under %s: %w", vadModelDir, err)
-		}
-		raw, err := outputCommand(
-			r.stderr,
-			asrBin,
-			"--silero-vad-model="+vadModel,
-			"--tokens="+tokens,
-			"--paraformer="+model,
-			"--decoding-method=greedy_search",
-			"--print-args=false",
-			"--num-threads="+strconv.Itoa(threads),
-			wav,
-		)
+		raw, err := outputCommand(r.stderr, asrBin, buildASRArgs(cfg, wav)...)
 		if err != nil {
 			return "", err
 		}
@@ -268,20 +393,47 @@ func (r runner) runASR(wav, model, tokens string, threads int, useVAD bool) (str
 	if err != nil {
 		return "", err
 	}
-	raw, err := outputCommand(
-		r.stderr,
-		asrBin,
-		"--tokens="+tokens,
-		"--paraformer="+model,
-		"--decoding-method=greedy_search",
-		"--print-args=false",
-		"--num-threads="+strconv.Itoa(threads),
-		wav,
-	)
+	raw, err := outputCommand(r.stderr, asrBin, buildASRArgs(cfg, wav)...)
 	if err != nil {
 		return "", err
 	}
 	return extractASRText(raw), nil
+}
+
+func buildASRArgs(cfg asrConfig, wav string) []string {
+	args := make([]string, 0, 12)
+	if cfg.UseVAD {
+		args = append(args, "--silero-vad-model="+cfg.VADModel)
+	}
+
+	switch cfg.Backend {
+	case backendSenseVoice:
+		args = append(args,
+			"--tokens="+cfg.Tokens,
+			"--sense-voice-model="+cfg.Model,
+			"--sense-voice-language="+cfg.SenseLanguage,
+			"--sense-voice-use-itn=true",
+		)
+	case backendNano:
+		args = append(args,
+			"--funasr-nano-encoder-adaptor="+cfg.Encoder,
+			"--funasr-nano-embedding="+cfg.Embedding,
+			"--funasr-nano-llm="+cfg.LLM,
+			"--funasr-nano-tokenizer="+cfg.Tokenizer,
+			"--funasr-nano-language=中文",
+			"--funasr-nano-itn=true",
+		)
+		if len(cfg.Hotwords) > 0 {
+			args = append(args, "--funasr-nano-hotwords="+strings.Join(cfg.Hotwords, ","))
+		}
+	}
+
+	args = append(args,
+		"--print-args=false",
+		"--num-threads="+strconv.Itoa(cfg.Threads),
+		wav,
+	)
+	return args
 }
 
 func (r runner) punctuate(bin, text string) (string, error) {
@@ -415,6 +567,27 @@ func findFirst(root string, names ...string) (string, error) {
 	return found, nil
 }
 
+func findDir(root, name string) (string, error) {
+	var found string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return err
+		}
+		if filepath.Base(path) == name {
+			found = path
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if found == "" {
+		return "", os.ErrNotExist
+	}
+	return found, nil
+}
+
 func resolveHome(override string) (string, error) {
 	if override != "" {
 		return override, nil
@@ -424,7 +597,7 @@ func resolveHome(override string) (string, error) {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "onnx-transcribe input.mp4 --threads 8 --out transcript.md")
-	fmt.Fprintln(w, "onnx-transcribe setup [--model seaco-paraformer-trilingual]")
+	fmt.Fprintln(w, "onnx-transcribe setup [--backend sensevoice|nano]")
 	fmt.Fprintln(w, "onnx-transcribe models list")
 	fmt.Fprintln(w, "onnx-transcribe models install <name>")
 	fmt.Fprintln(w, "onnx-transcribe doctor")

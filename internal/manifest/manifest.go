@@ -6,9 +6,11 @@ type Manifest struct {
 }
 
 type Model struct {
-	Type    string      `json:"type"`
-	Runtime string      `json:"runtime,omitempty"`
-	Files   []ModelFile `json:"files"`
+	Type          string      `json:"type"`
+	Runtime       string      `json:"runtime,omitempty"`
+	Backend       string      `json:"backend,omitempty"`
+	Files         []ModelFile `json:"files"`
+	RequiredFiles []string    `json:"requiredFiles,omitempty"`
 }
 
 type ModelFile struct {
@@ -31,13 +33,32 @@ type RuntimeAsset struct {
 func Default() Manifest {
 	return Manifest{
 		Models: map[string]Model{
-			"seaco-paraformer-trilingual": {
+			"sensevoice-small": {
 				Type:    "asr",
 				Runtime: "sherpa-onnx",
+				Backend: "sensevoice",
 				Files: []ModelFile{{
-					Path: "sherpa-onnx-paraformer-trilingual-zh-cantonese-en.tar.bz2",
-					URL:  "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-trilingual-zh-cantonese-en.tar.bz2",
+					Path: "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2",
+					URL:  "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2",
 				}},
+				RequiredFiles: []string{"model.int8.onnx", "tokens.txt"},
+			},
+			"funasr-nano-int8": {
+				Type:    "asr",
+				Runtime: "sherpa-onnx",
+				Backend: "nano",
+				Files: []ModelFile{{
+					Path: "sherpa-onnx-funasr-nano-int8-2025-12-30.tar.bz2",
+					URL:  "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-funasr-nano-int8-2025-12-30.tar.bz2",
+				}},
+				RequiredFiles: []string{
+					"encoder_adaptor.int8.onnx",
+					"embedding.int8.onnx",
+					"llm.int8.onnx",
+					"Qwen3-0.6B/tokenizer.json",
+					"Qwen3-0.6B/vocab.json",
+					"Qwen3-0.6B/merges.txt",
+				},
 			},
 			"ct-transformer-zh-en": {
 				Type:    "punctuation",
