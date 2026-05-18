@@ -57,7 +57,7 @@ func (i Installer) InstallRuntime(name, fromDir string) error {
 	if err := ExtractTarBz2(archive, dest); err != nil {
 		return err
 	}
-	return nil
+	return PromoteBinaries(dest, asset.Binaries)
 }
 
 func (i Installer) InstallModel(name, fromDir string) error {
@@ -373,12 +373,15 @@ func copyFile(src, dst string) error {
 func PromoteBinaries(root string, names []string) error {
 	for _, name := range names {
 		target := filepath.Join(root, name)
-		if _, err := os.Stat(target); err == nil {
-			continue
-		}
 		found, err := findUnder(root, name)
 		if err != nil {
 			return err
+		}
+		if err := copyAdjacentDLLs(filepath.Dir(found), root); err != nil {
+			return err
+		}
+		if _, err := os.Stat(target); err == nil {
+			continue
 		}
 		if err := copyFile(found, target); err != nil {
 			return err
@@ -390,23 +393,44 @@ func PromoteBinaries(root string, names []string) error {
 	return nil
 }
 
+func copyAdjacentDLLs(srcDir, destDir string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || strings.ToLower(filepath.Ext(entry.Name())) != ".dll" {
+			continue
+		}
+		if err := copyFile(filepath.Join(srcDir, entry.Name()), filepath.Join(destDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func findUnder(root, name string) (string, error) {
-	var found string
+	var fallback string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
 		if filepath.Base(path) == name {
-			found = path
-			return filepath.SkipAll
+			if filepath.Base(filepath.Dir(path)) == "bin" {
+				fallback = path
+				return filepath.SkipAll
+			}
+			if fallback == "" {
+				fallback = path
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
-	if found == "" {
+	if fallback == "" {
 		return "", fmt.Errorf("binary %q not found in archive", name)
 	}
-	return found, nil
+	return fallback, nil
 }

@@ -179,7 +179,7 @@ ffmpeg -y -i "$HOME/Downloads/131202 №30431 时空的虚幻 H265-高清-720P.m
 
       <section>
         <h2>7. Inspect output</h2>
-        <p>Review readability, punctuation, runtime, and hallucination around silence or music.</p>
+        <p>Review readability, paragraph breaks, runtime, and hallucination around silence or music.</p>
         <pre><code>open testdata/transcript.full.md
 wc -m testdata/transcript.full.md</code></pre>
       </section>
@@ -190,7 +190,7 @@ wc -m testdata/transcript.full.md</code></pre>
       <ul>
         <li>Compare Nano output with and without hotwords on domain-heavy lecture samples.</li>
         <li>Add a known SHA256 for the Nano ASR archive or document why GitHub does not expose one.</li>
-        <li>Check Chinese accuracy, punctuation quality, runtime, and silence/music hallucination on the default VAD path.</li>
+        <li>Check Chinese accuracy, paragraph breaks, runtime, and silence/music hallucination on the default VAD path.</li>
         <li>Research whether VAD parameters need user-facing knobs for noisy video.</li>
         <li>Add Windows and Linux smoke tests after the macOS Nano path works.</li>
         <li>Decide whether to bundle ffmpeg or keep system ffmpeg as a documented prerequisite.</li>
